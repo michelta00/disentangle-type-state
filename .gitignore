@@ -1,0 +1,28 @@
+# RStudio session files
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+
+# renv library (project-local R packages)
+renv/library/
+renv/python/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Conda environment (optional if you track environment.yml)
+.env/
+.venv/
+
+# Jupyter notebook checkpoints
+.ipynb_checkpoints/
+
+# Data files (if large or generated)
+data/*
+!data/.gitkeep
+
+# OS files
+.DS_Store
+Thumbs.db
