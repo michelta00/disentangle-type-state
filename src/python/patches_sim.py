@@ -1,5 +1,6 @@
 from ladder.scripts import InterpretableWorkflow
 import scanpy as sc
+import pandas as pd
 import pprint
 
 # read in data and preprocess
@@ -32,3 +33,7 @@ for epoch in num_epochs:
     print("=======================================================")
 
 pprint.pprint(results)
+
+# save results to a CSV file
+results_df = pd.DataFrame.from_dict(results, orient='index')
+results_df.to_csv("../../data/sim/02-patches/patches_results.csv")
