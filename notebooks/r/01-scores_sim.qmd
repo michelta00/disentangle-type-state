@@ -1,0 +1,191 @@
+---
+title: "Scores"
+author: "Michel Tarnow"
+date: today
+format: 
+    html:
+      toc: true
+      self-contained: true
+      highlight-style: github
+      code-line-numbers: true
+editor_options: 
+    chunk_output_type: inline
+---
+
+## Import Packages
+
+```{r}
+suppressPackageStartupMessages({
+  library(tidyverse)
+})
+```
+
+## Load Data
+
+### Patches Scores
+
+```{r}
+patches_con <- read_csv(
+  "../../data/sim/02-scores_patches/t100,s80,b0-patches_con_loadings.csv",
+  col_names = TRUE,
+  col_types = "cddd",
+  name_repair = "minimal"
+)
+colnames(patches_con)[1] = "gene_id"
+
+head(patches_con)
+```
+
+```{r}
+patches_clu_con <- read_csv(
+  "../../data/sim/02-scores_patches/t100,s80,b0-patches_clu_con_loadings.csv",
+  col_names = TRUE,
+  col_types = "cddd",
+  name_repair = "minimal"
+)
+colnames(patches_con)[1] = "gene_id"
+
+head(patches_clu_con)
+```
+
+### FSS Scores
+
+```{r}
+# read in RDS objects
+# fss_tf_rds <- readRDS("../../data/sim/02-scores_fss/sco-t100,s80,b0,tF.rds")
+# fss_pve_rds <- readRDS("../../data/sim/02-scores_fss/sco-t100,s80,b0,PVE.rds")
+# fss_spbds_rds <- readRDS("../../data/sim/02-scores_fss/sco-t100,s80,b0,sPBDS.rds")
+# fss_hvg_rds <- readRDS("../../data/sim/02-scores_fss/sco-t100,s80,b0,HVG.rds")
+# fss_random_rds <- readRDS("../../data/sim/02-scores_fss/sco-t100,s80,b0,random.rds")
+```
+
+```{r}
+# get all files containing FSS scores
+rds_files <- list.files(
+  "../../data/sim/02-scores_fss/",
+  pattern = "\\.rds$", 
+  full.names = TRUE
+)
+
+# select gene and score columns and combine all dfs in one list
+fss_score_dfs <- lapply(rds_files, function(file) {
+  
+  # get df from file name
+  df <- readRDS(file)
+  
+  # rename score value column to score name
+  if (nrow(df) > length(unique(df$gene_id))) {
+    # df contains both tPVE and sPVE scores
+    df <- df %>% 
+      pivot_wider(names_from = sco, values_from = sco_val)
+    cols_to_keep <- c("gene_id", "tPVE", "sPVE")
+  } else {
+    # df contains a single score
+    new_colname <- df$sco[1]
+    df <- df %>% 
+      rename(!!new_colname := sco_val)
+    cols_to_keep <- c("gene_id", new_colname)
+  }
+  
+  # select gene and score columns
+  df <- df %>% 
+    select(gene_id, all_of(cols_to_keep))
+})
+
+# combine all dfs in one df
+fss_scores <- as_tibble(reduce(
+  fss_score_dfs, 
+  ~ inner_join(.x, .y, by = "gene_id")
+))
+
+head(fss_scores)
+```
+
+### Gene Metadata
+
+```{r}
+gene_md <- as_tibble(readRDS("../../data/sim/01-pro/t100,s80,b0-rd.rds")) %>% 
+  select(gene_id, everything())
+
+head(gene_md)
+```
+
+### Gene Ground Truths
+
+Gene ground truths, i.e., whether a gene is considered a type or a state gene, can be obtained from the simulated data via the logFC of splatter's DE factor (e.g., `ConditionDE.Condition1` or `GroupDE.Group1` in gene metadata). A gene is considered DEnotDS if there is a group logFC unequal to 1 and no condition logFC unequal to 1. Similarly, a gene is considered DS if there is a condition logFC unequal to 1, regardless of group logFCs. DEnotDS genes are selected as ground truth type genes, while DS genes are selected for ground truth state genes, i.e., a type gene must have a group effect and no state effect, while a state gene must have a condition effect while a group effect is not necessary (but can exist).
+
+Here, all selections from the FSS paper's workflow are loaded for the t100,s80,b0 experiment and combined. This includes the selection strategies based on simulation parameters (like DEnotDS and DS) as well as selection strategies based on feature scores. 
+
+```{r}
+x <- readRDS("../../../type-state/outs/sim/sel-t100,s80,b0,DEnotDS.rds")
+```
+
+```{r}
+# get all files containing selections
+rds_files <- list.files(
+  "../../data/sim/03-selections_fss/",
+  pattern = "\\.rds$", 
+  full.names = TRUE
+)
+
+# select gene and selection columns and combine all dfs in one list
+fss_selection_dfs <- lapply(rds_files, function(file) {
+  
+  # get df from file name
+  df <- readRDS(file)
+  
+  # df contains a single selection
+  new_colname <- df$sel[1]
+  df <- df %>% 
+    rename(!!new_colname := sel_val)
+  cols_to_keep <- c("gene_id", new_colname)
+  
+  # select gene and score columns
+  df <- df %>% 
+    select(gene_id, all_of(cols_to_keep))
+})
+
+# combine all dfs in one df
+fss_selections <- as_tibble(reduce(
+  fss_selection_dfs, 
+  ~ inner_join(.x, .y, by = "gene_id")
+))
+
+# sort columns to put ground truths first
+fss_selections <- fss_selections %>% 
+  select(DEnotDS, DS, DSnotDE, DEgtDS, DSgtDE, DE, everything())
+
+head(fss_selections)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+## Compare Scores
+
+```{r}
+scores <- inner_join(patches_con_clu, fss_tf, by = "gene_id")
+scores$common_score_Patches <- (scores$common_score_Patches - mean(scores$common_score_Patches)) / sd(scores$common_score_Patches)
+scores$sco_val <- (scores$sco_val - mean(scores$sco_val)) / sd(scores$sco_val)
+```
+
+```{r}
+plot(scores$common_score_Patches, scores$sco_val)
+```
+
+
+
+
+
+
+
+
