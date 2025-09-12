@@ -36,6 +36,9 @@ outs/**/*html
 outs/**/*rds
 outs/**/*h5ad
 
+# Notebooks (to ignore Quarto html outputs)
+notebooks/**/*html
+
 # OS files
 .DS_Store
 Thumbs.db
