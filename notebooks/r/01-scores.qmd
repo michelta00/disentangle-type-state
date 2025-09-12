@@ -1,0 +1,61 @@
+---
+title: "Scores"
+author: "Michel Tarnow"
+date: today
+format: 
+    html:
+      toc: true
+      self-contained: true
+      highlight-style: github
+      code-line-numbers: true
+editor_options: 
+    chunk_output_type: inline
+---
+
+## Import Packages
+
+```{r}
+suppressPackageStartupMessages({
+  library(tidyverse)
+})
+```
+
+## Load Scores
+
+### Patches Scores
+
+```{r}
+patches_con <- read_csv("../../data/sim/02-patches/t100,s80,b0-con_loadings.csv")
+colnames(patches_con)[1] = "Gene"
+```
+
+```{r}
+patches_con_clu <- read_csv("../../data/sim/02-patches/t100,s80,b0-con-clu_loadings.csv")
+colnames(patches_con_clu)[1] = "gene_id"
+```
+
+### FSS Scores
+
+```{r}
+fss_tf <- readRDS("../../data/sim/02-fss/sco-t100,s80,b0,tF.rds")
+```
+
+## Compare Scores
+
+```{r}
+scores <- inner_join(patches_con_clu, fss_tf, by = "gene_id")
+scores$common_score_Patches <- (scores$common_score_Patches - mean(scores$common_score_Patches)) / sd(scores$common_score_Patches)
+scores$sco_val <- (scores$sco_val - mean(scores$sco_val)) / sd(scores$sco_val)
+```
+
+```{r}
+plot(scores$common_score_Patches, scores$sco_val)
+```
+
+
+
+
+
+
+
+

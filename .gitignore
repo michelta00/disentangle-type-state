@@ -19,9 +19,22 @@ __pycache__/
 # Jupyter notebook checkpoints
 .ipynb_checkpoints/
 
-# Data files (if large or generated)
-data/*
-!data/.gitkeep
+# Data
+data/**/*rds
+data/**/*csv
+data/**/*h5ad
+data/**/*pth
+
+# Logs
+# logs/**/*log
+
+# Outputs
+outs/**/*png
+outs/**/*pdf
+outs/**/*csv
+outs/**/*html
+outs/**/*rds
+outs/**/*h5ad
 
 # OS files
 .DS_Store

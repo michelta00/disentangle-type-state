@@ -24,17 +24,16 @@ print("\n Finished loading and preprocessing data.\n")
 
 print("\n Running Patches model with different hyperparameters...\n")
 
-# setup workflow
-workflow = InterpretableWorkflow(adata.copy(), verbose=True, random_seed=42)
-factors = ["group_id", "cluster_id"]
-
 # optuna optimization
-results = {}
 def objective(trial):
     # suggest hyperparameters
     epochs = trial.suggest_categorical("epochs", [50, 100, 200, 500, 1000, 1500, 2000])
     # epochs = trial.suggest_categorical("epochs", [1, 2, 5, 10])
     batch_size = trial.suggest_categorical("batch_size", [32, 64, 128, 256])
+
+    # setup workflow
+    workflow = InterpretableWorkflow(adata.copy(), verbose=True, random_seed=42)
+    factors = ["group_id", "cluster_id"]
     
     # run Patches
     workflow.prep_model(factors, batch_key="sample_id", minibatch_size=batch_size, model_type='Patches', model_args={'ld_normalize' : True})
@@ -44,7 +43,6 @@ def objective(trial):
     # evaluate model
     scores = workflow.evaluate_reconstruction()
     score = scores["Profile Correlation"][0]
-    results[(epochs, batch_size)] = scores
     return score
 
 study = optuna.create_study(direction="maximize")  
@@ -53,10 +51,5 @@ study.optimize(objective, n_trials=20)
 print("\n Finished running Patches model with different hyperparameters.\n")
 
 print(study.best_params)
-pprint.pprint(results)
-
-# save results to a CSV file
-results_df = pd.DataFrame.from_dict(results, orient='index')
-results_df.to_csv("../../data/sim/02-patches/patches_optimization_results.csv")
 
 print("\n Finished Patches optimization on simulated data.\n")
