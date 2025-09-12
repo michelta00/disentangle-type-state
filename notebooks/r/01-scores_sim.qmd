@@ -17,6 +17,7 @@ editor_options:
 ```{r}
 suppressPackageStartupMessages({
   library(tidyverse)
+  library(UpSetR)
 })
 ```
 
@@ -25,6 +26,7 @@ suppressPackageStartupMessages({
 ### Patches Scores
 
 ```{r}
+# read data from file and assign correct column names
 patches_con <- read_csv(
   "../../data/sim/02-scores_patches/t100,s80,b0-patches_con_loadings.csv",
   col_names = TRUE,
@@ -32,6 +34,20 @@ patches_con <- read_csv(
   name_repair = "minimal"
 )
 colnames(patches_con)[1] = "gene_id"
+
+
+# add combinations of scores
+
+## max absolute value
+patches_con <- patches_con %>% 
+  mutate(condition_score_Patches_max_abs = pmax(abs(Condition1_score_Patches), 
+                                                abs(Condition2_score_Patches)))
+
+## Euclidean norm
+patches_con <- patches_con %>% 
+  mutate(condition_score_Patches_eucl_norm = sqrt(Condition1_score_Patches^2 + 
+                                                    Condition2_score_Patches^2))
+
 
 head(patches_con)
 ```
@@ -43,7 +59,27 @@ patches_clu_con <- read_csv(
   col_types = "cddd",
   name_repair = "minimal"
 )
-colnames(patches_con)[1] = "gene_id"
+colnames(patches_clu_con)[1] = "gene_id"
+
+
+# add combinations of scores
+
+## max absolute value
+patches_clu_con <- patches_clu_con %>% 
+  mutate(condition_score_Patches_max_abs = pmax(abs(Condition1_score_Patches), 
+                                                abs(Condition2_score_Patches)),
+         group_score_Patches_max_abs = pmax(abs(Group1_score_Patches),
+                                            abs(Group2_score_Patches),
+                                            abs(Group3_score_Patches)))
+
+## Euclidean norm
+patches_clu_con <- patches_clu_con %>% 
+  mutate(condition_score_Patches_eucl_norm = sqrt(Condition1_score_Patches^2 + 
+                                                    Condition2_score_Patches^2),
+         group_score_Patches_eucl_norm = sqrt(Group1_score_Patches^2 +
+                                                Group2_score_Patches^2 +
+                                                Group3_score_Patches^2))
+
 
 head(patches_clu_con)
 ```
@@ -117,10 +153,6 @@ Gene ground truths, i.e., whether a gene is considered a type or a state gene, c
 Here, all selections from the FSS paper's workflow are loaded for the t100,s80,b0 experiment and combined. This includes the selection strategies based on simulation parameters (like DEnotDS and DS) as well as selection strategies based on feature scores. 
 
 ```{r}
-x <- readRDS("../../../type-state/outs/sim/sel-t100,s80,b0,DEnotDS.rds")
-```
-
-```{r}
 # get all files containing selections
 rds_files <- list.files(
   "../../data/sim/03-selections_fss/",
@@ -158,29 +190,126 @@ fss_selections <- fss_selections %>%
 head(fss_selections)
 ```
 
+## Compare Patches scores to gene ground truths
 
-
-
-
-
-
-
-
-
-
-
-
-## Compare Scores
+### Type Genes
 
 ```{r}
-scores <- inner_join(patches_con_clu, fss_tf, by = "gene_id")
-scores$common_score_Patches <- (scores$common_score_Patches - mean(scores$common_score_Patches)) / sd(scores$common_score_Patches)
-scores$sco_val <- (scores$sco_val - mean(scores$sco_val)) / sd(scores$sco_val)
+# get true type genes
+true_tg <- (fss_selections %>% 
+  filter(DEnotDS == TRUE) %>% 
+  select(gene_id))$gene_id
+
+# get the same number of predicted type genes via top-n Patches scores
+nt <- length(true_tg)
+
+t_abs <- rank(patches_clu_con$group_score_Patches_max_abs)
+o_abs <- order(t_abs, decreasing = TRUE)
+patches_tg_abs <- patches_clu_con$gene_id[o_abs[seq_len(nt)]]
+
+t_eucl <- rank(patches_clu_con$group_score_Patches_eucl_norm)
+o_eucl <- order(t_eucl, decreasing = TRUE)
+patches_tg_eucl <- patches_clu_con$gene_id[o_eucl[seq_len(nt)]]
+
+# compare overlap
+gene_sets <- list(
+  GroundTruth = true_tg,
+  PatchesMaxAbs = patches_tg_abs,
+  PatchesEuclNorm = patches_tg_eucl
+)
+
+upset(fromList(gene_sets),
+      order.by = "freq",
+      sets = c("GroundTruth", "PatchesMaxAbs"))
+upset(fromList(gene_sets),
+      order.by = "freq",
+      sets = c("GroundTruth", "PatchesEuclNorm"))
+```
+
+### State Genes
+
+```{r}
+# get true state genes
+true_sg <- (fss_selections %>% 
+  filter(DS == TRUE) %>% 
+  select(gene_id))$gene_id
+
+# get the same number of predicted state genes via top-n Patches scores
+nt <- length(true_sg)
+
+t_abs <- rank(patches_clu_con$condition_score_Patches_max_abs)
+o_abs <- order(t_abs, decreasing = TRUE)
+patches_sg_abs <- patches_clu_con$gene_id[o_abs[seq_len(nt)]]
+
+t_eucl <- rank(patches_clu_con$condition_score_Patches_eucl_norm)
+o_eucl <- order(t_eucl, decreasing = TRUE)
+patches_sg_eucl <- patches_clu_con$gene_id[o_eucl[seq_len(nt)]]
+
+# compare overlap
+gene_sets <- list(
+  GroundTruth = true_sg,
+  PatchesMaxAbs = patches_sg_abs,
+  PatchesEuclNorm = patches_sg_eucl
+)
+
+upset(fromList(gene_sets),
+      order.by = "freq",
+      sets = c("GroundTruth", "PatchesMaxAbs"))
+upset(fromList(gene_sets),
+      order.by = "freq",
+      sets = c("GroundTruth", "PatchesEuclNorm"))
+```
+
+## Compare Patches Scores to FSS Scores
+
+```{r}
+all_scores <- cbind.data.frame(
+  fss_scores,
+  patches_clu_con %>% 
+    select(
+      condition_score_Patches_max_abs,
+      group_score_Patches_max_abs,
+      condition_score_Patches_eucl_norm,
+      group_score_Patches_eucl_norm,
+      common_score_Patches
+    )
+)
 ```
 
 ```{r}
-plot(scores$common_score_Patches, scores$sco_val)
+cor(all_scores$sPBDS, all_scores$group_score_Patches_max_abs, method = "spearman")
 ```
+
+
+```{r}
+ggplot(data = all_scores, mapping = aes(x = (tPVE - mean(tPVE)) / sd(tPVE), y = (group_score_Patches_max_abs - mean(group_score_Patches_max_abs)) / sd(group_score_Patches_max_abs))) +
+  geom_point() +
+  geom_smooth() +
+  theme_minimal()
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
