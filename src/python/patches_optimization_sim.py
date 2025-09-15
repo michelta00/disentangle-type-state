@@ -41,7 +41,7 @@ min_lr = 1e-5
 max_lr = 1e-2
 epochs = [100, 200, 400, 500]
 batch_sizes = [64, 128, 256]
-n_trials = 2
+n_trials = 20
 
 # optuna optimization for full data
 best_params_all = optimize_patches(
