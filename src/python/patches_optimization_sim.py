@@ -1,55 +1,84 @@
-from ladder.scripts import InterpretableWorkflow
 import scanpy as sc
-import pandas as pd
-import pprint
-import optuna
+import logging
+from patches_optuna import optimize_patches
 
-print("\n Running Patches optimization on simulated data...\n")
 
-print("\n Loading and preprocessing data...\n")
+# set up logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s"
+)
 
-# read in data
+logging.info("Running Patches optimization on simulation data...")
+logging.info("Loading and preprocessing data...")
+
+# load data
 adata = sc.read_h5ad("../../data/sim/01-pro/t100,s80,b0.h5ad")
 
-# optional: highly variable gene selection on log-normalized data
-# adata.X = adata.layers["logcounts"]
-# sc.pp.highly_variable_genes(adata, n_top_genes=1500)
-# adata = adata[:, adata.var["highly_variable"]].copy()
+# full adata
+adata_full = adata.copy()
+
+# highly variable gene selection on log-normalized data
+adata.X = adata.layers["logcounts"]
+sc.pp.highly_variable_genes(adata, n_top_genes=1500)
+adata_hvg = adata[:, adata.var["highly_variable"]].copy()
 
 # reset to raw counts for model input (as stated in docs)
-adata.X = adata.layers["counts"]
-print(adata)
+adata_full.X = adata_full.layers["counts"]
+adata_hvg.X = adata_hvg.layers["counts"]
+logging.info(f"Full data shape: {adata_full.shape}, HVG data shape: {adata_hvg.shape}")
 
-print("\n Finished loading and preprocessing data.\n")
+logging.info("Finished loading and preprocessing data.")
+logging.info("Running Patches model with different hyperparameters and all genes...")
 
-print("\n Running Patches model with different hyperparameters...\n")
+# define parameters
+factors = ["cluster_id", "group_id"]
+batch_key = "sample_id"
+random_seed = 42
+convergence_threshold = 1e-4
+convergence_window = 50
+min_lr = 1e-5
+max_lr = 1e-2
+epochs = [100, 200, 400, 500]
+batch_sizes = [64, 128, 256]
+n_trials = 2
 
-# optuna optimization
-def objective(trial):
-    # suggest hyperparameters
-    epochs = trial.suggest_categorical("epochs", [50, 100, 200, 500, 1000, 1500, 2000])
-    # epochs = trial.suggest_categorical("epochs", [1, 2, 5, 10])
-    batch_size = trial.suggest_categorical("batch_size", [32, 64, 128, 256])
+# optuna optimization for full data
+best_params_all = optimize_patches(
+    adata_full,
+    factors=factors,
+    batch_key=batch_key,
+    random_seed=random_seed,
+    convergence_threshold=convergence_threshold,
+    convergence_window=convergence_window,
+    min_lr=min_lr,
+    max_lr=max_lr,
+    epochs=epochs,
+    batch_sizes=batch_sizes,
+    n_trials=n_trials,
+)
 
-    # setup workflow
-    workflow = InterpretableWorkflow(adata.copy(), verbose=True, random_seed=42)
-    factors = ["group_id", "cluster_id"]
-    
-    # run Patches
-    workflow.prep_model(factors, batch_key="sample_id", minibatch_size=batch_size, model_type='Patches', model_args={'ld_normalize' : True})
-    workflow.run_model(max_epochs=epochs, convergence_threshold=1e-5, convergence_window=50)
-    workflow.write_embeddings()
+logging.info("Finished running Patches model with different hyperparameters and all genes.")
+logging.info(f"Best parameters for full data: {best_params_all}")
 
-    # evaluate model
-    scores = workflow.evaluate_reconstruction()
-    score = scores["Profile Correlation"][0]
-    return score
+logging.info("Running Patches model with different hyperparameters and highly variable genes...")
 
-study = optuna.create_study(direction="maximize")  
-study.optimize(objective, n_trials=20)
+# optuna optimization for hvg data
+best_params_hvg = optimize_patches(
+    adata_hvg,
+    factors=factors,
+    batch_key=batch_key,
+    random_seed=random_seed,
+    convergence_threshold=convergence_threshold,
+    convergence_window=convergence_window,
+    min_lr=min_lr,
+    max_lr=max_lr,
+    epochs=epochs,
+    batch_sizes=batch_sizes,
+    n_trials=n_trials,
+)
 
-print("\n Finished running Patches model with different hyperparameters.\n")
+logging.info("Finished running Patches model with different hyperparameters and highly variable genes.")
+logging.info(f"Best parameters for HVG data: {best_params_hvg}")
 
-print(study.best_params)
-
-print("\n Finished Patches optimization on simulated data.\n")
+logging.info("Finished Patches optimization on simulated data.")
