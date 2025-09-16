@@ -37,10 +37,10 @@ batch_key = "sample_id"
 random_seed = 42
 convergence_threshold = 1e-4
 convergence_window = 50
-min_lr = 1e-5
+min_lr = 1e-4
 max_lr = 1e-2
-epochs = [100, 200, 400, 500]
-batch_sizes = [64, 128, 256]
+epochs = [500, 1000, 1500, 2000, 2500]
+batch_sizes = [32, 64, 128, 256]
 n_trials = 20
 
 # optuna optimization for full data
