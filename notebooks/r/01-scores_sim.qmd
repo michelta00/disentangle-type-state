@@ -1,5 +1,5 @@
 ---
-title: "Scores Comparison"
+title: "Scores-Selections Comparison"
 author: "Michel Tarnow"
 date: today
 format: 
@@ -18,201 +18,288 @@ editor_options:
 suppressPackageStartupMessages({
   library(tidyverse)
   library(UpSetR)
+  library(reshape2)
+  library(MLmetrics)
 })
 ```
 
-## Load Data and Prepare Data
+
+
+## Scoring
+
+Here, Patches scores produced by running the model on simulation data in Python are loaded from file and recombined into new ones. For example, scores for the different conditions (one score per condition) are combined into a single score by their max absolute value or by their Euclidean norm. FSS scores are loaded from file, which were obtained by running the snakemake workflow
+
+### Helper Functions
+
+```{r}
+# helper function for loading and processing Patches scores
+load_process_patches_scores <- function(file) {
+  
+  # read in df from file and fix column names
+  df <- read_csv(
+    file,
+    col_names = TRUE,
+    name_repair = "minimal",
+    show_col_types = FALSE
+  )
+  colnames(df)[1] = "gene_id"
+  
+  # add combinations of scores
+  
+  ## max absolute value for condition
+  df <- df %>% 
+    mutate(
+      condition_score_max_abs_Patches = pmax(
+        abs(Condition1_score_Patches),
+        abs(Condition2_score_Patches)
+      )
+    )
+  
+  # Euclidean norm for condition
+  df <- df %>% 
+    mutate(
+      condition_score_eucl_norm_Patches = sqrt(
+        Condition1_score_Patches^2 +
+          Condition2_score_Patches^2
+      )
+    )
+    
+  if ("Group1_score_Patches" %in% names(df)) {
+    ## cluster and condition scores available
+    
+    # max absolute value for group
+    df <- df %>% 
+      mutate(
+        group_score_max_abs_Patches = pmax(
+          abs(Group1_score_Patches),
+          abs(Group2_score_Patches),
+          abs(Group3_score_Patches)
+        )
+      )
+    
+    # Euclidean norm for group
+    df <- df %>% 
+      mutate(
+        group_score_eucl_norm_Patches = sqrt(
+          Group1_score_Patches^2 +
+            Group2_score_Patches^2 +
+            Group3_score_Patches^2
+        )
+      )
+    
+  }
+  
+  return(df)
+    
+}
+
+# helper function for loading and processing FSS scores
+load_process_fss_scores <- function(files, hvgs) {
+  
+  # select gene and score columns and combine all dfs in one list
+  dfs <- lapply(files, function(file) {
+    
+    # read in df from file
+    df <- readRDS(file)
+    
+    # rename score value column to score name
+    if (nrow(df) > length(unique(df$gene_id))) {
+      # df contains both tPVE and sPVE scores
+      
+      df <- df %>% 
+        pivot_wider(names_from = sco, values_from = sco_val)
+      cols_to_keep <- c("gene_id", "tPVE", "sPVE")
+      
+    } else {
+      # df contains a single score (all but tPVE + sPVE)
+      
+      new_colname <- df$sco[1]
+      df <- df %>% 
+        rename(!!new_colname := sco_val)
+      cols_to_keep <- c("gene_id", new_colname)
+      
+    }
+    
+    # select gene and score columns
+    df <- df %>% 
+      select(all_of(cols_to_keep))
+    
+    # return df
+    return(df)
+    
+  })
+  
+  # combine all dfs in one df
+  df_combined <- as_tibble(reduce(
+    dfs, 
+    ~ inner_join(.x, .y, by = "gene_id")
+  ))
+  
+  # create df HVGs only
+  df_combined_hvg <- df_combined %>% 
+    filter(gene_id %in% hvgs)
+  
+  # return combined df
+  return(
+    list(
+      fss_full = df_combined,
+      fss_hvg = df_combined_hvg
+    )
+  )
+  
+}
+```
 
 ### Patches Scores
 
-#### Full Data + Condtion (State) Only - Workflow1
-
 ```{r}
-# read data from file and assign correct column names
-patches_con_full <- read_csv(
-  "../../data/sim/02-scores_patches/t100,s80,b0-patches_con_full_loadings.csv",
-  col_names = TRUE,
-  col_types = "cddd",
-  name_repair = "minimal"
+files <- list.files(
+  path = "../../data/sim/02-scores_patches/",
+  pattern = "\\.csv$", full.names = TRUE,
 )
-colnames(patches_con_full)[1] = "gene_id"
 
-
-# add combinations of scores
-
-## max absolute value
-patches_con_full <- patches_con_full %>% 
-  mutate(condition_score_Patches_max_abs = pmax(abs(Condition1_score_Patches), 
-                                                abs(Condition2_score_Patches)))
-
-## Euclidean norm
-patches_con_full <- patches_con_full %>% 
-  mutate(condition_score_Patches_eucl_norm = sqrt(Condition1_score_Patches^2 + 
-                                                    Condition2_score_Patches^2))
-
-
-patches_con_full
-```
-
-#### HVG Data + Condtion (State) Only - Workflow2
-
-```{r}
-# read data from file and assign correct column names
-patches_con_hvg <- read_csv(
-  "../../data/sim/02-scores_patches/t100,s80,b0-patches_con_hvg_loadings.csv",
-  col_names = TRUE,
-  col_types = "cddd",
-  name_repair = "minimal"
-)
-colnames(patches_con_hvg)[1] = "gene_id"
-
-
-# add combinations of scores
-
-## max absolute value
-patches_con_hvg <- patches_con_hvg %>% 
-  mutate(condition_score_Patches_max_abs = pmax(abs(Condition1_score_Patches), 
-                                                abs(Condition2_score_Patches)))
-
-## Euclidean norm
-patches_con_hvg <- patches_con_hvg %>% 
-  mutate(condition_score_Patches_eucl_norm = sqrt(Condition1_score_Patches^2 + 
-                                                    Condition2_score_Patches^2))
-
-
-patches_con_hvg
-```
-
-#### Full Data + Cluster (Type) & Condtion (State) - Workflow3
-
-```{r}
-patches_clu_con_full <- read_csv(
-  "../../data/sim/02-scores_patches/t100,s80,b0-patches_clu_con_full_loadings.csv",
-  col_names = TRUE,
-  col_types = "cddd",
-  name_repair = "minimal"
-)
-colnames(patches_clu_con_full)[1] = "gene_id"
-
-
-# add combinations of scores
-
-## max absolute value
-patches_clu_con_full <- patches_clu_con_full %>% 
-  mutate(condition_score_Patches_max_abs = pmax(abs(Condition1_score_Patches), 
-                                                abs(Condition2_score_Patches)),
-         group_score_Patches_max_abs = pmax(abs(Group1_score_Patches),
-                                            abs(Group2_score_Patches),
-                                            abs(Group3_score_Patches)))
-
-## Euclidean norm
-patches_clu_con_full <- patches_clu_con_full %>% 
-  mutate(condition_score_Patches_eucl_norm = sqrt(Condition1_score_Patches^2 + 
-                                                    Condition2_score_Patches^2),
-         group_score_Patches_eucl_norm = sqrt(Group1_score_Patches^2 +
-                                                Group2_score_Patches^2 +
-                                                Group3_score_Patches^2))
-
-
-patches_clu_con_full
-```
-
-#### HVG Data + Cluster (Type) & Condtion (State) - Workflow4
-
-```{r}
-patches_clu_con_hvg <- read_csv(
-  "../../data/sim/02-scores_patches/t100,s80,b0-patches_clu_con_hvg_loadings.csv",
-  col_names = TRUE,
-  col_types = "cddd",
-  name_repair = "minimal"
-)
-colnames(patches_clu_con_hvg)[1] = "gene_id"
-
-
-# add combinations of scores
-
-## max absolute value
-patches_clu_con_hvg <- patches_clu_con_hvg %>% 
-  mutate(condition_score_Patches_max_abs = pmax(abs(Condition1_score_Patches), 
-                                                abs(Condition2_score_Patches)),
-         group_score_Patches_max_abs = pmax(abs(Group1_score_Patches),
-                                            abs(Group2_score_Patches),
-                                            abs(Group3_score_Patches)))
-
-## Euclidean norm
-patches_clu_con_hvg <- patches_clu_con_hvg %>% 
-  mutate(condition_score_Patches_eucl_norm = sqrt(Condition1_score_Patches^2 + 
-                                                    Condition2_score_Patches^2),
-         group_score_Patches_eucl_norm = sqrt(Group1_score_Patches^2 +
-                                                Group2_score_Patches^2 +
-                                                Group3_score_Patches^2))
-
-
-patches_clu_con_hvg
-```
-
-### FSS Scores and Selections
-
-#### FSS Scores
-
-```{r}
-# read in RDS objects
-# fss_tf_rds <- readRDS("../../data/sim/02-scores_fss/sco-t100,s80,b0,tF.rds")
-# fss_pve_rds <- readRDS("../../data/sim/02-scores_fss/sco-t100,s80,b0,PVE.rds")
-# fss_spbds_rds <- readRDS("../../data/sim/02-scores_fss/sco-t100,s80,b0,sPBDS.rds")
-# fss_hvg_rds <- readRDS("../../data/sim/02-scores_fss/sco-t100,s80,b0,HVG.rds")
-# fss_random_rds <- readRDS("../../data/sim/02-scores_fss/sco-t100,s80,b0,random.rds")
+patches_scores <- lapply(files, load_process_patches_scores)
+names(patches_scores) <- sub(".*-(.*)_loadings\\.csv", "\\1", basename(files))
 ```
 
 ```{r}
-# get all files containing FSS scores
-rds_files <- list.files(
+lapply(patches_scores, head)
+```
+
+### FSS Scores
+
+```{r}
+files <- list.files(
   "../../data/sim/02-scores_fss/",
   pattern = "\\.rds$", 
   full.names = TRUE
 )
+hvgs <- patches_scores$patches_clu_con_hvg$gene_id
 
-# select gene and score columns and combine all dfs in one list
-fss_score_dfs <- lapply(rds_files, function(file) {
-  
-  # get df from file name
-  df <- readRDS(file)
-  
-  # rename score value column to score name
-  if (nrow(df) > length(unique(df$gene_id))) {
-    # df contains both tPVE and sPVE scores
-    df <- df %>% 
-      pivot_wider(names_from = sco, values_from = sco_val)
-    cols_to_keep <- c("gene_id", "tPVE", "sPVE")
-  } else {
-    # df contains a single score
-    new_colname <- df$sco[1]
-    df <- df %>% 
-      rename(!!new_colname := sco_val)
-    cols_to_keep <- c("gene_id", new_colname)
-  }
-  
-  # select gene and score columns
-  df <- df %>% 
-    select(gene_id, all_of(cols_to_keep))
-})
-
-# combine all dfs in one df
-fss_scores_full <- as_tibble(reduce(
-  fss_score_dfs, 
-  ~ inner_join(.x, .y, by = "gene_id")
-))
-
-fss_scores_full
+fss_scores <- load_process_fss_scores(files, hvgs)
 ```
 
 ```{r}
-# subset FSS scores df to match HVGs from Patches workflows 2 and 4
-hvgs <- patches_clu_con_hvg$gene_id
-fss_scores_hvg <- fss_scores_full[fss_scores_full$gene_id %in% hvgs,]
-
-fss_scores_hvg
+lapply(fss_scores, head)
 ```
+
+### Comparison of Scores
+
+#### Transformation
+
+```{r}
+# combine Patches and FSS scores in one df for each Patches workflow
+all_scores <- lapply(patches_scores, function(df) {
+  
+  if (dim(df)[1] == dim(fss_scores$fss_full)[1]) {
+    # df contains full data
+    
+    new_df <- cbind.data.frame(
+      df,
+      fss_scores$fss_full %>% 
+        select(!gene_id)
+    )
+    
+  } else {
+    # df contains HVG data
+    
+    new_df <- cbind.data.frame(
+      df,
+      fss_scores$fss_hvg %>% 
+        select(!gene_id)
+    )
+    
+  }
+  
+  return(new_df)
+  
+})
+
+lapply(all_scores, head)
+```
+
+```{r}
+# add z-transformed scores to make them comparable
+all_scores_z <- lapply(all_scores, function(df) {
+  
+  new_df <- df %>% 
+    mutate(
+      across(
+        .cols = -gene_id,
+        .fns = ~ as.numeric(scale(.x)),
+        .names = "{.col}_z"
+      )
+    )
+  
+  return(new_df)
+  
+})
+
+lapply(all_scores_z, head)
+```
+
+#### Correlation
+
+```{r}
+lapply(all_scores_z, function(df) {
+  df_z <- df %>% 
+    select(ends_with("_z"))
+  
+  cor_mat <- cor(
+    df_z,
+    use = "pairwise.complete.obs",
+    method = "pearson"
+  )
+  
+  cor_long <- melt(cor_mat)
+  
+  ggplot(data = cor_long, mapping = aes(Var1, Var2, fill = value)) +
+    geom_tile() +
+    scale_fill_gradient2(
+      low = "blue", mid = "white", high = "red", midpoint = 0,
+      limits = c(-1, 1)
+    ) +
+    theme_minimal() +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1),
+      panel.grid = element_blank()
+    ) +
+    labs(x = "", y = "", fill = "Correlation")
+  
+})
+```
+
+#### Scatter Plots
+
+```{r}
+ggplot(
+  data = all_scores_z$patches_clu_con_full,
+  mapping = aes(x = tPVE_z, group_score_max_abs_Patches_z)
+) +
+  geom_point() +
+  geom_smooth() +
+  theme_minimal() +
+  labs(
+    x = "tPVE", y = "GroupMaxAbs", 
+    title = "Patches Cluster + Condition for Full Data"
+   )
+  
+```
+
+
+
+## Selection
+
+
+
+
+
+
+
+
+
+
+
 
 #### Gene Ground Truths (FSS Selections)
 
@@ -266,27 +353,81 @@ fss_selections_hvg <- fss_selections_full[fss_selections_full$gene_id %in% hvgs,
 fss_selections_hvg
 ```
 
-#### Gene Metadata
 
-```{r}
-gene_md <- as_tibble(readRDS("../../data/sim/01-pro/t100,s80,b0-rd.rds")) %>% 
-  select(gene_id, everything())
 
-gene_md
-```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 ## Comparison 1: Selected Genes and Gene Ground Truths
 
 ### Helper Functions
 
 ```{r}
-# get top n genes via specified score
+# get top n genes for one score
 get_top_n_genes <- function(df, score, n) {
   top_genes <- (df %>% 
     arrange(desc(.data[[score]])) %>% 
     slice_head(n = n))$gene_id
   
   return(top_genes)
+}
+
+# get top n genes for multiple scores
+get_top_n_genes_scores <- function(df, scores, t_or_s, nt, ns) {
+  results <- list()
+  for (i in 1:length(scores)) {
+    score <- scores[i]
+    x <- t_or_s[i]
+    if (x == "t") {
+      results[[score]] <- get_top_n_genes(df, score, nt)
+    } else if (x == "s") {
+      results[[score]] <- get_top_n_genes(df, score, ns)
+    }
+  }
+  return(results)
+}
+
+# get binary predictions for all scores in the selection list
+compute_predictions <- function(selection_list, all_genes) {
+  df <- data.frame(gene_id = all_genes)
+  for (key in ls(selection_list)) {
+    df[[key]] <- ifelse(all_genes %in% selection_list[[key]], 1, 0)
+  }
+  return(df)
 }
 ```
 
@@ -318,83 +459,124 @@ true_sg_hvg <- (fss_selections_hvg %>%
 # get the same number of predicted state genes via top-n Patches scores
 ns_full <- length(true_sg_full)
 ns_hvg <- length(true_sg_hvg)
+
+# get lists of all genes for metric calculations
+all_genes_full <- fss_selections_full$gene_id
+all_genes_hvg <- fss_selections_hvg$gene_id
+
+# get binary vectors for metric calculations
+y_true_tg_full <- as.numeric(fss_selections_full$DEnotDS)
+y_true_tg_hvg <- as.numeric(fss_selections_hvg$DEnotDS)
+
+y_true_sg_full <- as.numeric(fss_selections_full$DS)
+y_true_sg_hvg <- as.numeric(fss_selections_hvg$DS)
 ```
 
-### FSS Scores
+### FSS Scores Selections
 
 #### FSS Scores Full
 
 ```{r}
-# type genes based on tF score
-fss_full_tg_tF <- get_top_n_genes(
+# compute the selected genes for each score
+scores <- c("tF", "tPVE", "sPBDS", "sPVE")
+t_or_s <- c("t", "t", "s", "s")
+fss_selections_full <- get_top_n_genes_scores(
   fss_scores_full,
-  "tF",
-  nt_full
-)
-
-# type genes based on tPVE score
-fss_full_tg_tPVE <- get_top_n_genes(
-  fss_scores_full,
-  "tPVE",
-  nt_full
-)
-
-# state genes based on sPBDS score
-fss_full_sg_sPBDS <- get_top_n_genes(
-  fss_scores_full,
-  "sPBDS",
+  scores,
+  t_or_s,
+  nt_full,
   ns_full
 )
 
-# state genes based on sPVE score
-fss_full_sg_sPVE <- get_top_n_genes(
-  fss_scores_full,
-  "sPVE",
-  ns_full
-)
+# turn selected genes into predictions for metric calculation
+fss_full_preds <- compute_predictions(fss_full_selections, all_genes_full)
 ```
 
 ```{r}
-# combine all gene sets into one list for plotting
-gene_sets_fss_full <- list(
-  GroundTruthType = true_tg_full,
-  GroundTruthState = true_sg_full,
-  tF_full = fss_full_tg_tF,
-  tPVE_full = fss_full_tg_tPVE,
-  sPBDS_full = fss_full_sg_sPBDS,
-  sPVE_full = fss_full_sg_sPVE
-)
+# add ground truths to list
+fss_full_selections$GroundTruthType <- true_tg_full
+fss_full_selections$GroundTruthState <- true_sg_full
 
 # type ground truth vs. FSS tF selection
 upset(
-  fromList(gene_sets_fss_full),
+  fromList(fss_full_selections),
   order.by = "freq",
-  sets = c("GroundTruthType", "tF_full")
+  sets = c("GroundTruthType", "tF")
 )
 
 # type ground truth vs. FSS tPVE selection
 upset(
-  fromList(gene_sets_fss_full),
+  fromList(fss_full_selections),
   order.by = "freq",
-  sets = c("GroundTruthType", "tPVE_full")
+  sets = c("GroundTruthType", "tPVE")
 )
 
 # state ground truth vs. FSS sPBDS selection
 upset(
-  fromList(gene_sets_fss_full),
+  fromList(fss_full_selections),
   order.by = "freq",
-  sets = c("GroundTruthState", "sPBDS_full")
+  sets = c("GroundTruthState", "sPBDS")
 )
 
 # state ground truth vs. FSS sPVE selection
 upset(
-  fromList(gene_sets_fss_full),
+  fromList(fss_full_selections),
   order.by = "freq",
-  sets = c("GroundTruthState", "sPVE_full")
+  sets = c("GroundTruthState", "sPVE")
 )
 ```
 
 #### FSS Scores HVG
+
+```{r}
+# compute the selected genes for each score
+scores <- c("tF", "tPVE", "sPBDS", "sPVE")
+t_or_s <- c("t", "t", "s", "s")
+fss_hvg_selections <- get_top_n_genes_scores(
+  fss_scores_full,
+  scores,
+  t_or_s,
+  nt_full,
+  ns_full
+)
+
+# turn selected genes into predictions for metric calculation
+fss_full_preds <- compute_predictions(fss_full_selections, all_genes_full)
+```
+
+```{r}
+# add ground truths to list
+fss_full_selections$GroundTruthType <- true_tg_full
+fss_full_selections$GroundTruthState <- true_sg_full
+
+# type ground truth vs. FSS tF selection
+upset(
+  fromList(fss_full_selections),
+  order.by = "freq",
+  sets = c("GroundTruthType", "tF")
+)
+
+# type ground truth vs. FSS tPVE selection
+upset(
+  fromList(fss_full_selections),
+  order.by = "freq",
+  sets = c("GroundTruthType", "tPVE")
+)
+
+# state ground truth vs. FSS sPBDS selection
+upset(
+  fromList(fss_full_selections),
+  order.by = "freq",
+  sets = c("GroundTruthState", "sPBDS")
+)
+
+# state ground truth vs. FSS sPVE selection
+upset(
+  fromList(fss_full_selections),
+  order.by = "freq",
+  sets = c("GroundTruthState", "sPVE")
+)
+```
 
 ```{r}
 # type genes based on tF score
@@ -431,42 +613,42 @@ fss_hvg_sg_sPVE <- get_top_n_genes(
 gene_sets_fss_hvg <- list(
   GroundTruthType = true_tg_hvg,
   GroundTruthState = true_sg_hvg,
-  tF_hvg = fss_hvg_tg_tF,
-  tPVE_hvg = fss_hvg_tg_tPVE,
-  sPBDS_hvg = fss_hvg_sg_sPBDS,
-  sPVE_hvg = fss_hvg_sg_sPVE
+  tF_HVG = fss_hvg_tg_tF,
+  tPVE_HVG = fss_hvg_tg_tPVE,
+  sPBDS_HVG = fss_hvg_sg_sPBDS,
+  sPVE_HVG = fss_hvg_sg_sPVE
 )
 
 # type ground truth vs. FSS tF selection
 upset(
   fromList(gene_sets_fss_hvg),
   order.by = "freq",
-  sets = c("GroundTruthType", "tF_hvg")
+  sets = c("GroundTruthType", "tF_HVG")
 )
 
 # type ground truth vs. FSS tPVE selection
 upset(
   fromList(gene_sets_fss_hvg),
   order.by = "freq",
-  sets = c("GroundTruthType", "tPVE_hvg")
+  sets = c("GroundTruthType", "tPVE_HVG")
 )
 
 # state ground truth vs. FSS sPBDS selection
 upset(
   fromList(gene_sets_fss_hvg),
   order.by = "freq",
-  sets = c("GroundTruthState", "sPBDS_hvg")
+  sets = c("GroundTruthState", "sPBDS_HVG")
 )
 
 # state ground truth vs. FSS sPVE selection
 upset(
   fromList(gene_sets_fss_hvg),
   order.by = "freq",
-  sets = c("GroundTruthState", "sPVE_hvg")
+  sets = c("GroundTruthState", "sPVE_HVG")
 )
 ```
 
-### Patches Scores
+### Patches Scores Selections
 
 #### Full Data + Condtion (State) Only - Workflow1
 
@@ -835,33 +1017,24 @@ upset(fromList(gene_sets),
       sets = c("GroundTruth", "PatchesEuclNorm"))
 ```
 
-## Comparison 2: Patches Scores and FSS scores
-
-```{r}
-all_scores <- cbind.data.frame(
-  fss_scores,
-  patches_clu_con %>% 
-    select(
-      condition_score_Patches_max_abs,
-      group_score_Patches_max_abs,
-      condition_score_Patches_eucl_norm,
-      group_score_Patches_eucl_norm,
-      common_score_Patches
-    )
-)
-```
-
-```{r}
-cor(all_scores$sPBDS, all_scores$group_score_Patches_max_abs, method = "spearman")
-```
 
 
-```{r}
-ggplot(data = all_scores, mapping = aes(x = (tPVE - mean(tPVE)) / sd(tPVE), y = (group_score_Patches_max_abs - mean(group_score_Patches_max_abs)) / sd(group_score_Patches_max_abs))) +
-  geom_point() +
-  geom_smooth() +
-  theme_minimal()
-```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
