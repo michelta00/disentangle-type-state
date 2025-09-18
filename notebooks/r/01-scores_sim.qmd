@@ -27,7 +27,7 @@ suppressPackageStartupMessages({
 
 ## Scoring
 
-Here, Patches scores produced by running the model on simulation data in Python are loaded from file and recombined into new ones. For example, scores for the different conditions (one score per condition) are combined into a single score by their max absolute value or by their Euclidean norm. FSS scores are loaded from file, which were obtained by running the snakemake workflow
+Here, Patches scores produced by running the model on simulation data in Python are loaded from file and recombined into new ones. For example, scores for the different conditions (one score per condition) are combined into a single score by their max absolute value or by their Euclidean norm. FSS scores are loaded from file, which were obtained by running the snakemake workflow.
 
 ### Helper Functions
 
@@ -248,7 +248,7 @@ lapply(all_scores_z, function(df) {
   cor_mat <- cor(
     df_z,
     use = "pairwise.complete.obs",
-    method = "pearson"
+    method = "spearman"
   )
   
   cor_long <- melt(cor_mat)
@@ -264,7 +264,7 @@ lapply(all_scores_z, function(df) {
       axis.text.x = element_text(angle = 45, hjust = 1),
       panel.grid = element_blank()
     ) +
-    labs(x = "", y = "", fill = "Correlation")
+    labs(x = "", y = "", fill = "Rank\nCorrelation")
   
 })
 ```
@@ -272,36 +272,98 @@ lapply(all_scores_z, function(df) {
 #### Scatter Plots
 
 ```{r}
-ggplot(
-  data = all_scores_z$patches_clu_con_full,
-  mapping = aes(x = tPVE_z, group_score_max_abs_Patches_z)
-) +
-  geom_point() +
-  geom_smooth() +
-  theme_minimal() +
-  labs(
-    x = "tPVE", y = "GroupMaxAbs", 
-    title = "Patches Cluster + Condition for Full Data"
-   )
+# generic function for producing a scatter plot of two scores for all given dfs
+plot_scatter <- function(df_list, score1, score2) {
   
+  # apply plotting function to all dfs
+  lapply(seq_len(length(df_list)), function(i) {
+    
+    # get df and its name
+    df <- df_list[[i]]
+    name <- names(df_list)[i]
+    
+    # if scores are not present, skip df
+    if (any(!c(score1, score2) %in% colnames(df))) {
+      return(NULL)
+    }
+    
+    # calculate correlation between the two scores
+    c <- cor(df[[score1]], df[[score2]], method = "spearman")
+    title <- paste(name, "- Rank Correlation:", round(c, 2))
+  
+    # scatter plot comparing score1 and score2
+    ggplot(
+      data = df,
+      mapping = aes(x = .data[[score1]], y = .data[[score2]])
+    ) +
+      geom_point() +
+      geom_smooth() +
+      theme_minimal() +
+      labs(
+        x = score1, y = score2, 
+        title = title
+       )
+    
+  })
+  
+}
+```
+
+```{r}
+# tF vs. common score
+plot_scatter(all_scores_z, "tF_z", "common_score_Patches_z")
+```
+
+```{r}
+# tF vs. group max absolute score
+plot_scatter(all_scores_z, "tF_z", "group_score_max_abs_Patches_z")
+```
+
+```{r}
+# tF vs. group Euclidean norm score
+plot_scatter(all_scores_z, "tF_z", "group_score_eucl_norm_Patches_z")
+```
+
+```{r}
+# tPVE vs. common score
+plot_scatter(all_scores_z, "tPVE_z", "common_score_Patches_z")
+```
+
+```{r}
+# tPVE vs. group max absolute score
+plot_scatter(all_scores_z, "tPVE_z", "group_score_max_abs_Patches_z")
+```
+
+```{r}
+# tPVE vs. group Euclidean norm score
+plot_scatter(all_scores_z, "tPVE_z", "group_score_eucl_norm_Patches_z")
+```
+
+```{r}
+# sPBDS vs. condition max absolute score
+plot_scatter(all_scores_z, "sPBDS_z", "condition_score_max_abs_Patches_z")
+```
+
+```{r}
+# sPBDS vs. condition Euclidean norm score
+plot_scatter(all_scores_z, "sPBDS_z", "condition_score_eucl_norm_Patches_z")
+```
+
+```{r}
+# sPVE vs. condition max absolute score
+plot_scatter(all_scores_z, "sPVE_z", "condition_score_max_abs_Patches_z")
+```
+
+```{r}
+# sPVE vs. condition Euclidean norm score
+plot_scatter(all_scores_z, "sPVE_z", "condition_score_eucl_norm_Patches_z")
 ```
 
 
 
 ## Selection
 
-
-
-
-
-
-
-
-
-
-
-
-#### Gene Ground Truths (FSS Selections)
+### Gene Ground Truths (FSS Selections)
 
 Gene ground truths, i.e., whether a gene is considered a type or a state gene, can be obtained from the simulated data via the logFC of splatter's DE factor (e.g., `ConditionDE.Condition1` or `GroupDE.Group1` in gene metadata). A gene is considered DEnotDS if there is a group logFC unequal to 1 and no condition logFC unequal to 1. Similarly, a gene is considered DS if there is a condition logFC unequal to 1, regardless of group logFCs. DEnotDS genes are selected as ground truth type genes, while DS genes are selected for ground truth state genes, i.e., a type gene must have a group effect and no state effect, while a state gene must have a condition effect while a group effect is not necessary (but can exist).
 
@@ -329,31 +391,34 @@ fss_selection_dfs <- lapply(rds_files, function(file) {
   
   # select gene and score columns
   df <- df %>% 
-    select(gene_id, all_of(cols_to_keep))
+    select(all_of(cols_to_keep))
+  
 })
 
 # combine all dfs in one df
-fss_selections <- as_tibble(reduce(
+fss_selection_df <- as_tibble(reduce(
   fss_selection_dfs, 
   ~ inner_join(.x, .y, by = "gene_id")
 ))
 
 # sort columns to put ground truths first
-fss_selections_full <- fss_selections %>% 
+fss_selections_full <- fss_selection_df %>% 
   select(gene_id, DEnotDS, DS, DSnotDE, DEgtDS, DSgtDE, DE, everything())
 
-fss_selections_full
+# create df with only HVGs
+fss_selections_hvg <- fss_selections_full %>% 
+  filter(gene_id %in% hvgs)
+
+# combine into list
+fss_selections <- list(
+  fss_full = fss_selections_full,
+  fss_hvg = fss_selections_hvg
+)
+
+lapply(fss_selections, head)
 ```
 
-```{r}
-# subset FSS selections df to match HVGs from Patches workflows 2 and 4
-hvgs <- patches_clu_con_hvg$gene_id
-fss_selections_hvg <- fss_selections_full[fss_selections_full$gene_id %in% hvgs,]
-
-fss_selections_hvg
-```
-
-
+### Patches Selections
 
 
 
