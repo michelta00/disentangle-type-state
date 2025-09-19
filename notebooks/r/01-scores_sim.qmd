@@ -17,9 +17,10 @@ editor_options:
 ```{r}
 suppressPackageStartupMessages({
   library(tidyverse)
-  library(UpSetR)
   library(reshape2)
   library(MLmetrics)
+  library(ComplexUpset)
+  library(patchwork)
 })
 ```
 
@@ -370,6 +371,54 @@ Gene ground truths, i.e., whether a gene is considered a type or a state gene, c
 Here, all selections from the FSS paper's workflow are loaded for the t100,s80,b0 experiment and combined. This includes the selection strategies based on simulation parameters (like DEnotDS and DS) as well as selection strategies based on feature scores. 
 
 ```{r}
+load_process_fss_selections <- function(files, hvgs) {
+  
+  # select gene id and selection columns and combine all dfs in one list
+  fss_selection_dfs <- lapply(files, function(file) {
+    
+    # read in df from file
+    df <- readRDS(file)
+    
+    # df contains a single selection
+    new_colname <- df$sel[1]
+    df <- df %>% 
+      rename(!!new_colname := sel_val)
+    cols_to_keep <- c("gene_id", new_colname)
+    
+    # select gene and score columns
+    df <- df %>% 
+      select(all_of(cols_to_keep))
+    
+    return(df)
+    
+  })
+  
+  # combine all dfs in one df
+  fss_selections_full <- as_tibble(reduce(
+    fss_selection_dfs, 
+    ~ inner_join(.x, .y, by = "gene_id")
+  ))
+  
+  # sort columns to put ground truths first
+  fss_selections_full <- fss_selections_full %>% 
+    select(gene_id, DEnotDS, DS, DSnotDE, DEgtDS, DSgtDE, DE, everything())
+  
+  # create df with only HVGs
+  fss_selections_hvg <- fss_selections_full %>% 
+    filter(gene_id %in% hvgs)
+  
+  # combine into list
+  fss_selections <- list(
+    fss_full = fss_selections_full,
+    fss_hvg = fss_selections_hvg
+  )
+  
+  return(fss_selections)
+  
+}
+```
+
+```{r}
 # get all files containing selections
 rds_files <- list.files(
   "../../data/sim/03-selections_fss/",
@@ -377,56 +426,242 @@ rds_files <- list.files(
   full.names = TRUE
 )
 
-# select gene and selection columns and combine all dfs in one list
-fss_selection_dfs <- lapply(rds_files, function(file) {
-  
-  # get df from file name
-  df <- readRDS(file)
-  
-  # df contains a single selection
-  new_colname <- df$sel[1]
-  df <- df %>% 
-    rename(!!new_colname := sel_val)
-  cols_to_keep <- c("gene_id", new_colname)
-  
-  # select gene and score columns
-  df <- df %>% 
-    select(all_of(cols_to_keep))
-  
-})
+# get HVGs
+hvgs <- patches_scores$patches_clu_con_hvg$gene_id
 
-# combine all dfs in one df
-fss_selection_df <- as_tibble(reduce(
-  fss_selection_dfs, 
-  ~ inner_join(.x, .y, by = "gene_id")
-))
-
-# sort columns to put ground truths first
-fss_selections_full <- fss_selection_df %>% 
-  select(gene_id, DEnotDS, DS, DSnotDE, DEgtDS, DSgtDE, DE, everything())
-
-# create df with only HVGs
-fss_selections_hvg <- fss_selections_full %>% 
-  filter(gene_id %in% hvgs)
-
-# combine into list
-fss_selections <- list(
-  fss_full = fss_selections_full,
-  fss_hvg = fss_selections_hvg
-)
+# load and process FSS selections
+fss_selections <- load_process_fss_selections(rds_files, hvgs)
 
 lapply(fss_selections, head)
 ```
 
 ### Patches Selections
 
+```{r}
+# get number of genes to select from ground truth (match the number of ground
+# truth type (DEnotDS) and state (DS) genes for full and HVG data)
+nt_full <- sum(fss_selections$fss_full$DEnotDS)
+nt_hvg <- sum(fss_selections$fss_hvg$DEnotDS)
+ns_full <- sum(fss_selections$fss_full$DS)
+ns_hvg <- sum(fss_selections$fss_hvg$DS)
+```
 
+```{r}
+patches_selections <- lapply(patches_scores, function(score_df) {
+  
+  # determine if df contains full or HVG data and adjust n accordingly
+  full <- ifelse(dim(score_df)[1] > 1500, TRUE, FALSE)
+  nt <- ifelse(full, nt_full, nt_hvg)
+  ns <- ifelse(full, ns_full, ns_hvg)
+  
+  # create binary df that contains binary selections based on scores
+  binary_df <- score_df
+  for (col in names(score_df)) {
+    
+    # determine whether score is a type or state score and adjust n accordingly 
+    if (grepl("Group|group|common", col)) {
+      # score is a type score
+      n <- nt
+    } else if (grepl("condition|Condition", col)) {
+      # score is a state score
+      n <- ns
+    } else {
+      # skip columns not matching rules
+      next
+    }
+    
+    # convert score into binary predictions
+    scores <- score_df[[col]]
+    cutoff <- sort(scores, decreasing = TRUE)[n]
+    binary_df[[col]] <- scores >= cutoff
+    
+  }
+  
+  # add new selections based on combinations of scores
+  
+  # difference in rank of max absolute group and condition scores
+  max_abs <- c("group_score_max_abs_Patches", "condition_score_max_abs_Patches")
+  if (all(max_abs %in% colnames(score_df))) {
+    
+    t <- rank(score_df[[max_abs[1]]])
+    s <- rank(score_df[[max_abs[2]]])
+    
+    # type not state
+    scores <- t - s
+    cutoff <- sort(scores, decreasing = TRUE)[nt]
+    binary_df$rank_max_abs_Patches <- scores >= cutoff
+    
+  }
+  
+  # difference in rank of Euclidean norm group and condition scores
+  eucl_norm <- c("group_score_eucl_norm_Patches", "condition_score_eucl_norm_Patches")
+  if (all(eucl_norm %in% colnames(score_df))) {
+    
+    t <- rank(score_df[[eucl_norm[1]]])
+    s <- rank(score_df[[eucl_norm[2]]])
+    
+    # type not state
+    scores <- t - s
+    cutoff <- sort(scores, decreasing = TRUE)[nt]
+    binary_df$rank_eucl_norm_Patches <- scores >= cutoff
+    
+  }
+  
+  return(binary_df)
+  
+})
 
+names(patches_selections) <- names(patches_scores)
+lapply(patches_selections, head)
+```
 
+### Comparison of Selections
 
+#### Overlaps
 
+```{r}
+plot_overlaps <- function(df, title) {
+  
+  # remove columns and scores not needed
+  df <- df %>% 
+    select(
+      -DSnotDE,
+      -DEgtDS,
+      -DSgtDE,
+      -DE
+    )
+  
+  # define ground truths as reference columns
+  ref_cols <- c("DEnotDS", "DS")
+  
+  # define scores to compare to ground truth
+  score_cols <- colnames(df)
+  ordered_scores <- c(ref_cols, setdiff(score_cols, ref_cols))
+  
+  # compute overlaps
+  overlap_df <- expand.grid(Score = score_cols, GroundTruth = ref_cols, stringsAsFactors = FALSE) %>% 
+    rowwise() %>% 
+    mutate(Overlap = sum(df[[Score]] & df[[GroundTruth]])) %>% 
+    ungroup()
+  
+  # order scores for plot
+  overlap_df$Score <- factor(overlap_df$Score, levels = ordered_scores)
+  
+  # plot overlap as heat map
+  ggplot(overlap_df, aes(x = Score, y = GroundTruth, fill = Overlap)) +
+    geom_tile(color = "white") +
+    geom_text(aes(label = Overlap), color = "black") +
+    scale_fill_gradient(low = "white", high = "steelblue") +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+    labs(title = title)
+  
+}
+```
 
+```{r}
+plot_overlaps(
+  bind_cols(
+    fss_selections$fss_full %>% select(-gene_id),
+    patches_selections$patches_clu_con_full %>% select(-gene_id)
+  ),
+  "Full Data - Clusters & Conditions"
+)
+```
 
+```{r}
+plot_overlaps(
+  bind_cols(
+    fss_selections$fss_hvg %>% select(-gene_id),
+    patches_selections$patches_clu_con_hvg %>% select(-gene_id)
+  ),
+  "HVG Data - Clusters & Conditions"
+)
+```
+
+```{r}
+plot_overlaps(
+  bind_cols(
+    fss_selections$fss_full %>% select(-gene_id),
+    patches_selections$patches_con_full %>% select(-gene_id)
+  ),
+  "Full Data - Conditions"
+)
+```
+
+```{r}
+plot_overlaps(
+  bind_cols(
+    fss_selections$fss_hvg %>% select(-gene_id),
+    patches_selections$patches_con_hvg %>% select(-gene_id)
+  ),
+  "HVG Data - Conditions"
+)
+```
+
+#### F1 Scores
+
+```{r}
+plot_f1_scores <- function(df, title) {
+  
+  # get ground truth
+  y_true_type <- df$DEnotDS
+  y_true_state <- df$DS
+  
+  # remove columns and scores not needed
+  df <- df %>% 
+    select(
+      -DEnotDS,
+      -DS,
+      -DSnotDE,
+      -DEgtDS,
+      -DSgtDE,
+      -DE
+    )
+  
+  # calculate F1 scores
+  f1_scores <- c()
+  for (col in colnames(df)) {
+    
+    if (grepl("condition|Condition", col)) {
+      # state scores: compare to y_true_state
+      f1_scores <- c(
+        f1_scores,
+        F1_Score(y_true = y_true_state, y_pred = df[[col]])
+      )
+      
+    } else {
+      # type scores: compare to y_true_type
+      f1_scores <- c(
+        f1_scores,
+        F1_Score(y_true = y_true_type, y_pred = df[[col]])
+      )
+      
+    }
+    
+  }
+  
+  results <- data.frame(Score = colnames(df), F1 = f1_scores)
+  
+  # plot overlap as heat map
+  ggplot(results, aes(x = Score, y = F1, fill = Score)) +
+    geom_col() +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+    labs(title = title)
+  
+}
+```
+
+```{r}
+plot_f1_scores(
+  bind_cols(
+    fss_selections$fss_hvg %>% select(-gene_id),
+    patches_selections$patches_clu_con_hvg %>% select(-gene_id)
+  ),
+  "HVG Data - Conditions"
+)
+```
 
 
 
@@ -1014,73 +1249,6 @@ upset(
 
 
 
-### Type Genes
-
-```{r}
-# get true type genes
-true_tg <- (fss_selections %>% 
-  filter(DEnotDS == TRUE) %>% 
-  select(gene_id))$gene_id
-
-# get the same number of predicted type genes via top-n Patches scores
-nt <- length(true_tg)
-
-t_abs <- rank(patches_clu_con$group_score_Patches_max_abs)
-o_abs <- order(t_abs, decreasing = TRUE)
-patches_tg_abs <- patches_clu_con$gene_id[o_abs[seq_len(nt)]]
-
-t_eucl <- rank(patches_clu_con$group_score_Patches_eucl_norm)
-o_eucl <- order(t_eucl, decreasing = TRUE)
-patches_tg_eucl <- patches_clu_con$gene_id[o_eucl[seq_len(nt)]]
-
-# compare overlap
-gene_sets <- list(
-  GroundTruth = true_tg,
-  PatchesMaxAbs = patches_tg_abs,
-  PatchesEuclNorm = patches_tg_eucl
-)
-
-upset(fromList(gene_sets),
-      order.by = "freq",
-      sets = c("GroundTruth", "PatchesMaxAbs"))
-upset(fromList(gene_sets),
-      order.by = "freq",
-      sets = c("GroundTruth", "PatchesEuclNorm"))
-```
-
-### State Genes
-
-```{r}
-# get true state genes
-true_sg <- (fss_selections %>% 
-  filter(DS == TRUE) %>% 
-  select(gene_id))$gene_id
-
-# get the same number of predicted state genes via top-n Patches scores
-nt <- length(true_sg)
-
-t_abs <- rank(patches_clu_con$condition_score_Patches_max_abs)
-o_abs <- order(t_abs, decreasing = TRUE)
-patches_sg_abs <- patches_clu_con$gene_id[o_abs[seq_len(nt)]]
-
-t_eucl <- rank(patches_clu_con$condition_score_Patches_eucl_norm)
-o_eucl <- order(t_eucl, decreasing = TRUE)
-patches_sg_eucl <- patches_clu_con$gene_id[o_eucl[seq_len(nt)]]
-
-# compare overlap
-gene_sets <- list(
-  GroundTruth = true_sg,
-  PatchesMaxAbs = patches_sg_abs,
-  PatchesEuclNorm = patches_sg_eucl
-)
-
-upset(fromList(gene_sets),
-      order.by = "freq",
-      sets = c("GroundTruth", "PatchesMaxAbs"))
-upset(fromList(gene_sets),
-      order.by = "freq",
-      sets = c("GroundTruth", "PatchesEuclNorm"))
-```
 
 
 
