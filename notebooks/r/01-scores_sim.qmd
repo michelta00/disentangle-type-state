@@ -21,6 +21,11 @@ suppressPackageStartupMessages({
   library(MLmetrics)
   library(ComplexUpset)
   library(patchwork)
+  library(scran)
+  library(scater)
+  library(igraph)
+  library(SingleCellExperiment)
+  library(MLVSBM)
 })
 ```
 
@@ -642,15 +647,31 @@ plot_f1_scores <- function(df, title) {
   }
   
   results <- data.frame(Score = colnames(df), F1 = f1_scores)
+  results$Score <- factor(results$Score, levels = results$Score)
   
-  # plot overlap as heat map
+  # plot F1 scores
   ggplot(results, aes(x = Score, y = F1, fill = Score)) +
     geom_col() +
+    coord_cartesian(ylim = c(0.5, 1)) +
     theme_minimal() +
-    theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-    labs(title = title)
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1),
+      legend.position = "none"
+    ) +
+    labs(title = title) +
+    scale_fill_viridis_d(option = "plasma")
   
 }
+```
+
+```{r}
+plot_f1_scores(
+  bind_cols(
+    fss_selections$fss_full %>% select(-gene_id),
+    patches_selections$patches_clu_con_full %>% select(-gene_id)
+  ),
+  "Full Data - Clusters & Conditions"
+)
 ```
 
 ```{r}
@@ -659,8 +680,137 @@ plot_f1_scores(
     fss_selections$fss_hvg %>% select(-gene_id),
     patches_selections$patches_clu_con_hvg %>% select(-gene_id)
   ),
+  "HVG Data - Clusters & Conditions"
+)
+```
+
+```{r}
+plot_f1_scores(
+  bind_cols(
+    fss_selections$fss_full %>% select(-gene_id),
+    patches_selections$patches_con_full %>% select(-gene_id)
+  ),
+  "Full Data - Conditions"
+)
+```
+
+```{r}
+plot_f1_scores(
+  bind_cols(
+    fss_selections$fss_hvg %>% select(-gene_id),
+    patches_selections$patches_con_hvg %>% select(-gene_id)
+  ),
   "HVG Data - Conditions"
 )
+```
+
+
+
+## Clustering
+
+### Load SingleCellExperiment
+
+```{r}
+# full data
+sce_full <- readRDS("../../data/sim/01-pro/t100,s80,b0.rds")
+
+# HVG data
+hvgs <- fss_selections$fss_hvg$gene_id
+sce_hvg <- sce_full[rownames(sce_full) %in% hvgs, ]
+```
+
+### Perform Clustering Based on Selections
+
+```{r}
+# define selections to be used for clustering
+selections <- c(
+  "DEnotDS",
+  "random",
+  "HVG",
+  "tF",
+  "tF_sPVE",
+  "tF_sPBDS",
+  "tPVE_sPVE",
+  "group_score_max_abs_Patches",
+  "group_score_eucl_norm_Patches",
+  "rank_max_abs_Patches",
+  "rank_eucl_norm_Patches"
+)
+```
+
+```{r}
+# combine FSS and Patches selections into one for full and HVG data
+all_selections_full <- bind_cols(
+  fss_selections$fss_full,
+  patches_selections$patches_clu_con_full %>% select(-gene_id)
+)
+
+all_selections_hvg <- bind_cols(
+  fss_selections$fss_hvg,
+  patches_selections$patches_clu_con_hvg %>% select(-gene_id)
+)
+```
+
+```{r}
+set.seed(42)
+ari_scores <- lapply(selections, function(selection) {
+  
+  # full data
+  
+  ## dimensionality reduction and clustering
+  sce_iter <- sce_full
+  sce_iter <- runPCA(sce_iter, subset_row=all_selections_full[[selection]])
+  g <- buildSNNGraph(sce_iter, use.dimred="PCA", type="jaccard")
+  k <- cluster_louvain(g, resolution=1)$membership
+  new_col <- paste0("cluster_re_", selection)
+  sce_iter[[new_col]] <- factor(k, seq_along(unique(k)))
+  
+  ## ARI score calculation
+  ari_full <- ARI(sce_iter$cluster_id, sce_iter[[new_col]])
+  
+  
+  # HVG data
+  
+  ## dimensionality reduction and clustering
+  sce_iter <- sce_hvg
+  sce_iter <- runPCA(sce_iter, subset_row=all_selections_hvg[[selection]])
+  g <- buildSNNGraph(sce_iter, use.dimred="PCA", type="jaccard")
+  k <- cluster_louvain(g, resolution=1)$membership
+  new_col <- paste0("cluster_re_", selection)
+  sce_iter[[new_col]] <- factor(k, seq_along(unique(k)))
+  
+  ## ARI score calculation
+  ari_hvg <- ARI(sce_iter$cluster_id, sce_iter[[new_col]])
+    
+  
+  # return ARI scores
+  return(
+    data.frame(
+      selection = selection,
+      Full = ari_full,
+      HVG = ari_hvg
+    )
+  )
+  
+})
+
+ari <- bind_rows(ari_scores)
+```
+
+```{r}
+# reshape for plotting
+ari_long <- ari %>%
+  pivot_longer(cols = c(Full, HVG), 
+               names_to = "dataset", values_to = "ARI")
+
+
+ggplot(ari_long, aes(x = reorder(selection, ARI), y = ARI, fill = reorder(selection, ARI))) +
+  geom_col(aes(alpha = dataset), position = position_dodge(width = 0.8)) +
+  coord_flip() +
+  scale_fill_viridis_d(guide = "none") +
+  scale_alpha_manual(values = c(1, 0.6), name = "Dataset") +
+  theme_minimal() +
+  labs(x = "Selection", y = "ARI", title = "ARI Scores per Selection")
 ```
 
 
@@ -674,25 +824,7 @@ plot_f1_scores(
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-## Comparison 1: Selected Genes and Gene Ground Truths
+## Old Code
 
 ### Helper Functions
 
@@ -729,513 +861,6 @@ compute_predictions <- function(selection_list, all_genes) {
   }
   return(df)
 }
-```
-
-### Gene Ground Truths
-
-```{r}
-# get true type genes (DEnotDS)
-true_tg_full <- (fss_selections_full %>% 
-  filter(DEnotDS == TRUE) %>% 
-  select(gene_id))$gene_id
-
-true_tg_hvg <- (fss_selections_hvg %>% 
-  filter(DEnotDS == TRUE) %>% 
-  select(gene_id))$gene_id
-
-# get number of true type genes
-nt_full <- length(true_tg_full)
-nt_hvg <- length(true_tg_hvg)
-
-# get true state genes (DS)
-true_sg_full <- (fss_selections_full %>% 
-  filter(DS == TRUE) %>% 
-  select(gene_id))$gene_id
-
-true_sg_hvg <- (fss_selections_hvg %>% 
-  filter(DS == TRUE) %>% 
-  select(gene_id))$gene_id 
-
-# get the same number of predicted state genes via top-n Patches scores
-ns_full <- length(true_sg_full)
-ns_hvg <- length(true_sg_hvg)
-
-# get lists of all genes for metric calculations
-all_genes_full <- fss_selections_full$gene_id
-all_genes_hvg <- fss_selections_hvg$gene_id
-
-# get binary vectors for metric calculations
-y_true_tg_full <- as.numeric(fss_selections_full$DEnotDS)
-y_true_tg_hvg <- as.numeric(fss_selections_hvg$DEnotDS)
-
-y_true_sg_full <- as.numeric(fss_selections_full$DS)
-y_true_sg_hvg <- as.numeric(fss_selections_hvg$DS)
-```
-
-### FSS Scores Selections
-
-#### FSS Scores Full
-
-```{r}
-# compute the selected genes for each score
-scores <- c("tF", "tPVE", "sPBDS", "sPVE")
-t_or_s <- c("t", "t", "s", "s")
-fss_selections_full <- get_top_n_genes_scores(
-  fss_scores_full,
-  scores,
-  t_or_s,
-  nt_full,
-  ns_full
-)
-
-# turn selected genes into predictions for metric calculation
-fss_full_preds <- compute_predictions(fss_full_selections, all_genes_full)
-```
-
-```{r}
-# add ground truths to list
-fss_full_selections$GroundTruthType <- true_tg_full
-fss_full_selections$GroundTruthState <- true_sg_full
-
-# type ground truth vs. FSS tF selection
-upset(
-  fromList(fss_full_selections),
-  order.by = "freq",
-  sets = c("GroundTruthType", "tF")
-)
-
-# type ground truth vs. FSS tPVE selection
-upset(
-  fromList(fss_full_selections),
-  order.by = "freq",
-  sets = c("GroundTruthType", "tPVE")
-)
-
-# state ground truth vs. FSS sPBDS selection
-upset(
-  fromList(fss_full_selections),
-  order.by = "freq",
-  sets = c("GroundTruthState", "sPBDS")
-)
-
-# state ground truth vs. FSS sPVE selection
-upset(
-  fromList(fss_full_selections),
-  order.by = "freq",
-  sets = c("GroundTruthState", "sPVE")
-)
-```
-
-#### FSS Scores HVG
-
-```{r}
-# compute the selected genes for each score
-scores <- c("tF", "tPVE", "sPBDS", "sPVE")
-t_or_s <- c("t", "t", "s", "s")
-fss_hvg_selections <- get_top_n_genes_scores(
-  fss_scores_full,
-  scores,
-  t_or_s,
-  nt_full,
-  ns_full
-)
-
-# turn selected genes into predictions for metric calculation
-fss_full_preds <- compute_predictions(fss_full_selections, all_genes_full)
-```
-
-```{r}
-# add ground truths to list
-fss_full_selections$GroundTruthType <- true_tg_full
-fss_full_selections$GroundTruthState <- true_sg_full
-
-# type ground truth vs. FSS tF selection
-upset(
-  fromList(fss_full_selections),
-  order.by = "freq",
-  sets = c("GroundTruthType", "tF")
-)
-
-# type ground truth vs. FSS tPVE selection
-upset(
-  fromList(fss_full_selections),
-  order.by = "freq",
-  sets = c("GroundTruthType", "tPVE")
-)
-
-# state ground truth vs. FSS sPBDS selection
-upset(
-  fromList(fss_full_selections),
-  order.by = "freq",
-  sets = c("GroundTruthState", "sPBDS")
-)
-
-# state ground truth vs. FSS sPVE selection
-upset(
-  fromList(fss_full_selections),
-  order.by = "freq",
-  sets = c("GroundTruthState", "sPVE")
-)
-```
-
-```{r}
-# type genes based on tF score
-fss_hvg_tg_tF <- get_top_n_genes(
-  fss_scores_hvg,
-  "tF",
-  nt_hvg
-)
-
-# type genes based on tPVE score
-fss_hvg_tg_tPVE <- get_top_n_genes(
-  fss_scores_hvg,
-  "tPVE",
-  nt_hvg
-)
-
-# state genes based on sPBDS score
-fss_hvg_sg_sPBDS <- get_top_n_genes(
-  fss_scores_hvg,
-  "sPBDS",
-  ns_hvg
-)
-
-# state genes based on sPVE score
-fss_hvg_sg_sPVE <- get_top_n_genes(
-  fss_scores_hvg,
-  "sPVE",
-  ns_hvg
-)
-```
-
-```{r}
-# combine all gene sets into one list for plotting
-gene_sets_fss_hvg <- list(
-  GroundTruthType = true_tg_hvg,
-  GroundTruthState = true_sg_hvg,
-  tF_HVG = fss_hvg_tg_tF,
-  tPVE_HVG = fss_hvg_tg_tPVE,
-  sPBDS_HVG = fss_hvg_sg_sPBDS,
-  sPVE_HVG = fss_hvg_sg_sPVE
-)
-
-# type ground truth vs. FSS tF selection
-upset(
-  fromList(gene_sets_fss_hvg),
-  order.by = "freq",
-  sets = c("GroundTruthType", "tF_HVG")
-)
-
-# type ground truth vs. FSS tPVE selection
-upset(
-  fromList(gene_sets_fss_hvg),
-  order.by = "freq",
-  sets = c("GroundTruthType", "tPVE_HVG")
-)
-
-# state ground truth vs. FSS sPBDS selection
-upset(
-  fromList(gene_sets_fss_hvg),
-  order.by = "freq",
-  sets = c("GroundTruthState", "sPBDS_HVG")
-)
-
-# state ground truth vs. FSS sPVE selection
-upset(
-  fromList(gene_sets_fss_hvg),
-  order.by = "freq",
-  sets = c("GroundTruthState", "sPVE_HVG")
-)
-```
-
-### Patches Scores Selections
-
-#### Full Data + Condtion (State) Only - Workflow1
-
-```{r}
-# type genes based on common score
-patches_con_full_tg_common <- get_top_n_genes(
-  patches_con_full,
-  "common_score_Patches",
-  nt_full
-)
-
-# state genes based on max absolute score
-patches_con_full_sg_max_abs <- get_top_n_genes(
-  patches_con_full,
-  "condition_score_Patches_max_abs",
-  ns_full
-)
-
-# state genes based on Euclidean norm score
-patches_con_full_sg_eucl_norm <- get_top_n_genes(
-  patches_con_full,
-  "condition_score_Patches_eucl_norm",
-  ns_full
-)
-```
-
-```{r}
-# combine all gene sets into one list for plotting
-gene_sets_con_full <- list(
-  GroundTruthType = true_tg_full,
-  GroundTruthState = true_sg_full,
-  PatchesConFullCommon = patches_con_full_tg_common,
-  PatchesConFullMaxAbs = patches_con_full_sg_max_abs,
-  PatchesConFullEuclNorm = patches_con_full_sg_eucl_norm
-)
-
-# type ground truth vs. Patches common score selection
-upset(
-  fromList(gene_sets_con_full),
-  order.by = "freq",
-  sets = c("GroundTruthType", "PatchesConFullCommon")
-)
-
-# state ground truth vs. Patches condition max absolute selection
-upset(
-  fromList(gene_sets_con_full),
-  order.by = "freq",
-  sets = c("GroundTruthState", "PatchesConFullMaxAbs")
-)
-
-# state ground truth vs. Patches condition Euclidean norm selection
-upset(
-  fromList(gene_sets_con_full),
-  order.by = "freq",
-  sets = c("GroundTruthState", "PatchesConFullEuclNorm")
-)
-```
-
-#### HVG Data + Condtion (State) Only - Workflow2
-
-```{r}
-# types genes based on common score
-patches_con_hvg_tg_common <- get_top_n_genes(
-  patches_con_hvg,
-  "common_score_Patches",
-  nt_hvg
-)
-
-# state genes based on max absolute score
-patches_con_hvg_sg_max_abs <- get_top_n_genes(
-  patches_con_hvg,
-  "condition_score_Patches_max_abs",
-  ns_hvg
-)
-
-# state genes based on Euclidean norm score
-patches_con_hvg_sg_eucl_norm <- get_top_n_genes(
-  patches_con_hvg,
-  "condition_score_Patches_eucl_norm",
-  ns_hvg
-)
-```
-
-```{r}
-# combine all gene sets into one list for plotting
-gene_sets_con_hvg <- list(
-  GroundTruthType = true_tg_hvg,
-  GroundTruthState = true_sg_hvg,
-  PatchesConHVGCommon = patches_con_hvg_tg_common,
-  PatchesConHVGMaxAbs = patches_con_hvg_sg_max_abs,
-  PatchesConHVGEuclNorm = patches_con_hvg_sg_eucl_norm
-)
-
-# type ground truth vs. Patches common score selection
-upset(
-  fromList(gene_sets_con_hvg),
-  order.by = "freq",
-  sets = c("GroundTruthType", "PatchesConHVGCommon")
-)
-
-# state ground truth vs. Patches condition max absolute selection
-upset(
-  fromList(gene_sets_con_hvg),
-  order.by = "freq",
-  sets = c("GroundTruthState", "PatchesConHVGMaxAbs")
-)
-
-# state ground truth vs. Patches condition Euclidean norm selection
-upset(
-  fromList(gene_sets_con_hvg),
-  order.by = "freq",
-  sets = c("GroundTruthState", "PatchesConHVGEuclNorm")
-)
-```
-
-#### Full Data + Cluster (Type) & Condtion (State) - Workflow3
-
-```{r}
-# type genes based on common score
-patches_clu_con_full_tg_common <- get_top_n_genes(
-  patches_clu_con_full,
-  "common_score_Patches",
-  nt_full
-)
-
-# type genes based on max absolute score
-patches_clu_con_full_tg_max_abs <- get_top_n_genes(
-  patches_clu_con_full,
-  "group_score_Patches_max_abs",
-  nt_full
-)
-
-# type genes based on Euclidean norm score
-patches_clu_con_full_tg_eucl_norm <- get_top_n_genes(
-  patches_clu_con_full,
-  "group_score_Patches_eucl_norm",
-  nt_full
-)
-
-# state genes based on max absolute score
-patches_clu_con_full_sg_max_abs <- get_top_n_genes(
-  patches_clu_con_full,
-  "condition_score_Patches_max_abs",
-  ns_full
-)
-
-# state genes based on Euclidean norm score
-patches_clu_con_full_sg_eucl_norm <- get_top_n_genes(
-  patches_clu_con_full,
-  "condition_score_Patches_eucl_norm",
-  ns_full
-)
-```
-
-```{r}
-# combine all gene sets into one list for plotting
-gene_sets_clu_con_full <- list(
-  GroundTruthType = true_tg_full,
-  GroundTruthState = true_sg_full,
-  PatchesCluConFullCommon = patches_clu_con_full_tg_common,
-  PatchesCluConFullMaxAbsType = patches_clu_con_full_tg_max_abs,
-  PatchesCluConFullEuclNormType = patches_clu_con_full_tg_eucl_norm,
-  PatchesCluConFullMaxAbsState = patches_clu_con_full_sg_max_abs,
-  PatchesCluConFullEuclNormState = patches_clu_con_full_sg_eucl_norm
-)
-
-# type ground truth vs. Patches common score selection
-upset(
-  fromList(gene_sets_clu_con_full),
-  order.by = "freq",
-  sets = c("GroundTruthType", "PatchesCluConFullCommon")
-)
-
-# type ground truth vs. Patches group max absolute selection
-upset(
-  fromList(gene_sets_clu_con_full),
-  order.by = "freq",
-  sets = c("GroundTruthType", "PatchesCluConFullMaxAbsType")
-)
-
-# type ground truth vs. Patches group Euclidean norm selection
-upset(
-  fromList(gene_sets_clu_con_full),
-  order.by = "freq",
-  sets = c("GroundTruthType", "PatchesCluConFullEuclNormType")
-)
-
-# state ground truth vs. Patches condition max absolute selection
-upset(
-  fromList(gene_sets_clu_con_full),
-  order.by = "freq",
-  sets = c("GroundTruthState", "PatchesCluConFullMaxAbsState")
-)
-
-# state ground truth vs. Patches condition Euclidean norm selection
-upset(
-  fromList(gene_sets_clu_con_full),
-  order.by = "freq",
-  sets = c("GroundTruthState", "PatchesCluConFullEuclNormState")
-)
-```
-
-#### HVG Data + Cluster (Type) & Condtion (State) - Workflow4
-
-```{r}
-# type genes based on common score
-patches_clu_con_hvg_tg_common <- get_top_n_genes(
-  patches_clu_con_hvg,
-  "common_score_Patches",
-  nt_hvg
-)
-
-# type genes based on max absolute score
-patches_clu_con_hvg_tg_max_abs <- get_top_n_genes(
-  patches_clu_con_hvg,
-  "group_score_Patches_max_abs",
-  nt_hvg
-)
-
-# type genes based on Euclidean norm score
-patches_clu_con_hvg_tg_eucl_norm <- get_top_n_genes(
-  patches_clu_con_hvg,
-  "group_score_Patches_eucl_norm",
-  nt_hvg
-)
-
-# state genes based on max absolute score
-patches_clu_con_hvg_sg_max_abs <- get_top_n_genes(
-  patches_clu_con_hvg,
-  "condition_score_Patches_max_abs",
-  ns_hvg
-)
-
-# state genes based on Euclidean norm score
-patches_clu_con_hvg_sg_eucl_norm <- get_top_n_genes(
-  patches_clu_con_hvg,
-  "condition_score_Patches_eucl_norm",
-  ns_hvg
-)
-```
-
-```{r}
-# combine all gene sets into one list for plotting
-gene_sets_clu_con_hvg <- list(
-  GroundTruthType = true_tg_hvg,
-  GroundTruthState = true_sg_hvg,
-  PatchesCluConHVGCommon = patches_clu_con_hvg_tg_common,
-  PatchesCluConHVGMaxAbsType = patches_clu_con_hvg_tg_max_abs,
-  PatchesCluConHVGEuclNormType = patches_clu_con_hvg_tg_eucl_norm,
-  PatchesCluConHVGMaxAbsState = patches_clu_con_hvg_sg_max_abs,
-  PatchesCluConHVGEuclNormState = patches_clu_con_hvg_sg_eucl_norm
-)
-
-# type ground truth vs. Patches common score selection
-upset(
-  fromList(gene_sets_clu_con_hvg),
-  order.by = "freq",
-  sets = c("GroundTruthType", "PatchesCluConHVGCommon")
-)
-
-# type ground truth vs. Patches group max absolute selection
-upset(
-  fromList(gene_sets_clu_con_hvg),
-  order.by = "freq",
-  sets = c("GroundTruthType", "PatchesCluConHVGMaxAbsType")
-)
-
-# type ground truth vs. Patches group Euclidean norm selection
-upset(
-  fromList(gene_sets_clu_con_hvg),
-  order.by = "freq",
-  sets = c("GroundTruthType", "PatchesCluConHVGEuclNormType")
-)
-
-# state ground truth vs. Patches condition max absolute selection
-upset(
-  fromList(gene_sets_clu_con_hvg),
-  order.by = "freq",
-  sets = c("GroundTruthState", "PatchesCluConHVGMaxAbsState")
-)
-
-# state ground truth vs. Patches condition Euclidean norm selection
-upset(
-  fromList(gene_sets_clu_con_hvg),
-  order.by = "freq",
-  sets = c("GroundTruthState", "PatchesCluConHVGEuclNormState")
-)
 ```
 
 
