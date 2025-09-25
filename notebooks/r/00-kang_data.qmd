@@ -1,0 +1,85 @@
+---
+title: "Kang Data"
+author: "Michel Tarnow"
+date: today
+format: 
+    html:
+      toc: true
+      self-contained: true
+      highlight-style: github
+      code-line-numbers: true
+editor_options: 
+    chunk_output_type: inline
+---
+
+## Import Packages
+
+```{r}
+suppressPackageStartupMessages({
+  library(SingleCellExperiment)
+  library(tidyverse)
+  library(zellkonverter)
+})
+```
+
+## Load Data
+
+```{r}
+sce_raw <- readRDS("../../data/kang/00-raw/Kang18.rds")
+sce <- readRDS("../../data/kang/01-pro/Kang18.rds")
+cd <- readRDS("../../data/kang/01-pro/Kang18-cd.rds")
+rd <- readRDS("../../data/kang/01-pro/Kang18-rd.rds")
+```
+
+# Summary and Exploration
+
+```{r}
+# dimensions
+cat("Genes x Cells: \n", as.character(dim(sce)), "\n \n")
+
+# gene and cell names
+cat("Gene Names: \n", head(rownames(sce)), "... \n \n")
+cat("Cell Names: \n", head(colnames(sce)), "... \n \n")
+
+# assays
+cat("Assays: \n", assayNames(sce), "\n \n")
+
+# metadata
+cat("Gene metadata: \n", colnames(rd), "\n \n")
+cat("Cell metadata: \n", colnames(cd), "\n \n")
+```
+
+```{r}
+ggplot(data = cd, mapping = aes(x = PC1, y = PC2, shape = group_id, colour = cluster_id)) +
+  geom_point() +
+  labs(title = "PBMC Cells from Lupus Patients",
+       x = "PC1",
+       y = "PC2",
+       colour = "Group/Type",
+       shape = "Condition/State") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+```{r}
+ggplot(data = cd, mapping = aes(x = PC1, y = PC2, colour = sample_id)) +
+  geom_point() +
+  labs(title = "PBMC Cells from Lupus Patients",
+       x = "PC1",
+       y = "PC2",
+       colour = "Sample") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+## Export Objects for Use in Python
+
+```{r}
+# sce object
+sce_file <- "../../data/Kang/01-pro/Kang18.h5ad"
+writeH5AD(sce, sce_file)
+
+# metadata dfs
+write.csv(cd, "../../data/kang/01-pro/Kang18-cd.csv", row.names = TRUE)
+write.csv(rd, "../../data/kang/01-pro/Kang18-rd.csv", row.names = TRUE)
+```
