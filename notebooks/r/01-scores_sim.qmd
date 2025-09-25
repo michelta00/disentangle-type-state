@@ -295,6 +295,13 @@ subtitles <- c(
 )
 cor_plots <- Map(function(p, sub) p + ggtitle(sub), cor_plots, subtitles)
 
+cor_plots <- lapply(cor_plots, function(p) {
+  p + theme(
+    text = element_text(size = 15),
+    plot.title = element_text(size = 15)
+  )
+})
+
 combined_plot <- wrap_plots(cor_plots, ncol = 2, guides = "collect") +
   plot_annotation(
     title = "Spearman Rank Correlation of Scores",
@@ -302,7 +309,7 @@ combined_plot <- wrap_plots(cor_plots, ncol = 2, guides = "collect") +
       plot.title = element_text(
         hjust = 0.5,
         margin = margin(b = 30),
-        size = 16,
+        size = 17,
         face = "bold"
       )
     )
@@ -749,6 +756,13 @@ subtitles <- c(
 )
 overlap_plots <- Map(function(p, sub) p + ggtitle(sub), overlap_plots, subtitles)
 
+overlap_plots <- lapply(overlap_plots, function(p) {
+  p + theme(
+    text = element_text(size = 15),
+    plot.title = element_text(size = 15)
+  )
+})
+
 combined_plot <- wrap_plots(overlap_plots, ncol = 2, guides = "collect") +
   plot_annotation(
     title = "Overlap of Selected Genes",
@@ -756,7 +770,7 @@ combined_plot <- wrap_plots(overlap_plots, ncol = 2, guides = "collect") +
       plot.title = element_text(
         hjust = 0.5,
         margin = margin(b = 30),
-        size = 16,
+        size = 17,
         face = "bold"
       )
     )
@@ -764,20 +778,9 @@ combined_plot <- wrap_plots(overlap_plots, ncol = 2, guides = "collect") +
 
 # save and show combined plot
 ggsave("sel_overlap.png", combined_plot, path = "../../outs/sim/",
-       width = 14, height = 9, dpi = 300)
+       width = 15, height = 9, dpi = 300)
 combined_plot
 ```
-
-
-
-
-
-
-
-
-
-
-
 
 #### F1 Scores
 
@@ -881,7 +884,7 @@ p1 <- bind_cols(
     scale_fill_manual(values = c("steelblue", "darkgrey")) +
     scale_alpha_manual(values = c(1, 0.6), name = "Data") +
     theme_minimal() +
-    labs(x = "Selection", y = "F1", title = "Groups & Clusters")
+    labs(x = "Selection", y = "F1", title = "Groups & Conditions")
 
 p1
 ```
@@ -899,7 +902,7 @@ p2 <- bind_cols(
     scale_fill_manual(values = c("steelblue", "darkgrey")) +
     scale_alpha_manual(values = c(1, 0.6), name = "Data") +
     theme_minimal() +
-    labs(x = "Selection", y = "F1", title = "Clusters")
+    labs(x = "Selection", y = "F1", title = "Conditions")
 
 p2
 ```
@@ -907,6 +910,13 @@ p2
 ```{r}
 # combine individual plots
 f1_plots <- list(p1, p2)
+
+f1_plots <- lapply(f1_plots, function(p) {
+  p + theme(
+    text = element_text(size = 15),
+    plot.title = element_text(size = 15)
+  )
+})
 
 combined_plot <- wrap_plots(f1_plots, ncol = 2, guides = "collect") +
   plot_annotation(
@@ -923,7 +933,7 @@ combined_plot <- wrap_plots(f1_plots, ncol = 2, guides = "collect") +
 
 # save and show combined plot
 ggsave("sel_f1.png", combined_plot, path = "../../outs/sim/",
-       width = 14, height = 9, dpi = 300)
+       width = 14, height = 5, dpi = 300)
 combined_plot
 ```
 
@@ -1035,7 +1045,7 @@ p1 <- bind_cols(
     scale_fill_manual(values = c("steelblue", "darkgrey")) +
     scale_alpha_manual(values = c(1, 0.6), name = "Data") +
     theme_minimal() +
-    labs(x = "Selection", y = "ARI", title = "Groups & Clusters")
+    labs(x = "Selection", y = "ARI", title = "Groups & Conditions")
 
 p1
 ```
@@ -1053,7 +1063,7 @@ p2 <- bind_cols(
     scale_fill_manual(values = c("steelblue", "darkgrey")) +
     scale_alpha_manual(values = c(1, 0.6), name = "Data") +
     theme_minimal() +
-    labs(x = "Selection", y = "ARI", title = "Clusters")
+    labs(x = "Selection", y = "ARI", title = "Conditions")
 
 p2
 ```
@@ -1062,6 +1072,13 @@ p2
 # combine individual plots
 ari_plots <- list(p1, p2)
 
+ari_plots <- lapply(ari_plots, function(p) {
+  p + theme(
+    text = element_text(size = 15),
+    plot.title = element_text(size = 15)
+  )
+})
+
 combined_plot <- wrap_plots(ari_plots, ncol = 2, guides = "collect") +
   plot_annotation(
     title = "ARI Score per Selection",
@@ -1069,7 +1086,7 @@ combined_plot <- wrap_plots(ari_plots, ncol = 2, guides = "collect") +
       plot.title = element_text(
         hjust = 0.5,
         margin = margin(b = 30),
-        size = 16,
+        size = 17,
         face = "bold"
       )
     )
@@ -1077,7 +1094,7 @@ combined_plot <- wrap_plots(ari_plots, ncol = 2, guides = "collect") +
 
 # save and show combined plot
 ggsave("sel_ari.png", combined_plot, path = "../../outs/sim/",
-       width = 14, height = 9, dpi = 300)
+       width = 14, height = 5, dpi = 300)
 combined_plot
 ```
 
