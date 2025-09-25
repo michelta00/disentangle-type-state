@@ -52,10 +52,10 @@ cat("Cell metadata: \n", colnames(cd), "\n \n")
 ```{r}
 ggplot(data = cd, mapping = aes(x = PC1, y = PC2, shape = cluster_id, colour = group_id)) +
   geom_point() +
-  labs(title = "Cell Type and State",
+  labs(title = "Simulation Data",
        x = "PC1",
        y = "PC2",
-       shape = "Cluster/Type",
+       shape = "Group/Type",
        colour = "Condition/State") +
   theme_bw() +
   theme(plot.title = element_text(hjust = 0.5))
@@ -64,9 +64,10 @@ ggplot(data = cd, mapping = aes(x = PC1, y = PC2, shape = cluster_id, colour = g
 ```{r}
 ggplot(data = cd, mapping = aes(x = PC1, y = PC2, colour = sample_id)) +
   geom_point() +
-  labs(title = "Samples",
+  labs(title = "Simulation Data",
        x = "PC1",
-       y = "PC2") +
+       y = "PC2",
+       colour = "Sample") +
   theme_bw() +
   theme(plot.title = element_text(hjust = 0.5))
 ```
