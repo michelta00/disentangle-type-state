@@ -31,7 +31,7 @@ cd <- readRDS("../../data/sim/01-pro/t100,s80,b0-cd.rds")
 rd <- readRDS("../../data/sim/01-pro/t100,s80,b0-rd.rds")
 ```
 
-# Summary and Exploration
+## Summary and Exploration
 
 ```{r}
 # dimensions
@@ -50,26 +50,91 @@ cat("Cell metadata: \n", colnames(cd), "\n \n")
 ```
 
 ```{r}
-ggplot(data = cd, mapping = aes(x = PC1, y = PC2, shape = cluster_id, colour = group_id)) +
-  geom_point() +
+cbf_palette = c(
+    "#E69F00",  # Orange
+    "#56B4E9",  # Sky Blue
+    "#009E73",  # Bluish Green
+    "#F0E442",  # Yellow
+    "#0072B2",  # Blue
+    "#D55E00",  # Vermillion
+    "#CC79A7",  # Reddish Purple
+    "#999999",  # Gray
+    "#117733",  # Dark Green
+    "#882255",  # Wine
+    "#44AA99",  # Teal
+    "#DDCC77",  # Sand
+    "#88CCEE",  # Light Blue
+    "#AA4499",  # Magenta
+    "#332288",  # Navy
+    "#E17C05",  # Burnt Orange
+    "#DC267F",  # Pink
+    "#648FFF",  # Vivid Blue
+    "#785EF0",  # Violet
+    "#FE6100"   # Bright Orange
+)
+```
+
+```{r}
+ggplot(
+  data = cd,
+  mapping = aes(x = PC1, y = PC2, shape = cluster_id, colour = group_id)
+) +
+  geom_point(size = 1.4, alpha = 0.7) +
+  scale_colour_manual(values = cbf_palette[1:2]) +
   labs(title = "Simulation Data",
        x = "PC1",
        y = "PC2",
        shape = "Group/Type",
        colour = "Condition/State") +
-  theme_bw() +
-  theme(plot.title = element_text(hjust = 0.5))
+  theme_classic() +
+  theme(
+    text = element_text(size = 16),
+    plot.title = element_text(
+        hjust = 0.5,
+        size = 18,
+        face = "bold"
+      )
+  )
+
+ggsave(
+  "sim_data1.png",
+  last_plot(),
+  path = "../../outs/sim/",
+  width = 7,
+  height = 5,
+  dpi = 300
+)
 ```
 
 ```{r}
-ggplot(data = cd, mapping = aes(x = PC1, y = PC2, colour = sample_id)) +
-  geom_point() +
+ggplot(
+  data = cd,
+  mapping = aes(x = PC1, y = PC2, colour = sample_id)
+) +
+  geom_point(size = 1.4, alpha = 0.7) +
+  scale_colour_manual(values = cbf_palette[3:8]) +
   labs(title = "Simulation Data",
        x = "PC1",
        y = "PC2",
        colour = "Sample") +
-  theme_bw() +
-  theme(plot.title = element_text(hjust = 0.5))
+  theme_classic() +
+  theme(
+    text = element_text(size = 16),
+    plot.title = element_text(
+        hjust = 0.5,
+        size = 18,
+        face = "bold"
+      )
+  )
+
+ggsave(
+  "sim_data2.png",
+  last_plot(),
+  path = "../../outs/sim/",
+  width = 7,
+  height = 5,
+  dpi = 300
+)
 ```
 
 ## Export Objects for Use in Python

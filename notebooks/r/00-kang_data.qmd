@@ -17,6 +17,7 @@ editor_options:
 ```{r}
 suppressPackageStartupMessages({
   library(SingleCellExperiment)
+  library(scater)
   library(tidyverse)
   library(zellkonverter)
 })
@@ -31,7 +32,7 @@ cd <- readRDS("../../data/kang/01-pro/Kang18-cd.rds")
 rd <- readRDS("../../data/kang/01-pro/Kang18-rd.rds")
 ```
 
-# Summary and Exploration
+## Summary and Exploration
 
 ```{r}
 # dimensions
@@ -50,26 +51,161 @@ cat("Cell metadata: \n", colnames(cd), "\n \n")
 ```
 
 ```{r}
-ggplot(data = cd, mapping = aes(x = PC1, y = PC2, shape = group_id, colour = cluster_id)) +
-  geom_point() +
-  labs(title = "PBMC Cells from Lupus Patients",
-       x = "PC1",
-       y = "PC2",
-       colour = "Group/Type",
-       shape = "Condition/State") +
-  theme_minimal() +
-  theme(plot.title = element_text(hjust = 0.5))
+cd$UMAP1 <- reducedDim(sce, "UMAP")[ , 1]
+cd$UMAP2 <- reducedDim(sce, "UMAP")[ , 2]
+cd$TSNE1 <- reducedDim(sce, "TSNE")[ , 1]
+cd$TSNE2 <- reducedDim(sce, "TSNE")[ , 2]
 ```
 
 ```{r}
-ggplot(data = cd, mapping = aes(x = PC1, y = PC2, colour = sample_id)) +
-  geom_point() +
-  labs(title = "PBMC Cells from Lupus Patients",
-       x = "PC1",
-       y = "PC2",
+cbf_palette = c(
+    "#E69F00",  # Orange
+    "#56B4E9",  # Sky Blue
+    "#009E73",  # Bluish Green
+    "#F0E442",  # Yellow
+    "#0072B2",  # Blue
+    "#D55E00",  # Vermillion
+    "#CC79A7",  # Reddish Purple
+    "#999999",  # Gray
+    "#117733",  # Dark Green
+    "#882255",  # Wine
+    "#44AA99",  # Teal
+    "#DDCC77",  # Sand
+    "#88CCEE",  # Light Blue
+    "#AA4499",  # Magenta
+    "#332288",  # Navy
+    "#E17C05",  # Burnt Orange
+    "#DC267F",  # Pink
+    "#648FFF",  # Vivid Blue
+    "#785EF0",  # Violet
+    "#FE6100"   # Bright Orange
+)
+```
+
+```{r}
+ggplot(
+  data = cd,
+  mapping = aes(x = UMAP1, y = UMAP2, shape = group_id, colour = cluster_id)
+) +
+  geom_point(size = 1, alpha = 0.7) +
+  scale_colour_manual(values = cbf_palette[1:8]) +
+  labs(title = "Kang18 Data",
+       x = "UMAP1",
+       y = "UMAP2",
+       shape = "Treatment",
+       colour = "Cell Type") +
+  theme_classic() +
+  theme(
+    text = element_text(size = 16),
+    plot.title = element_text(
+        hjust = 0.5,
+        size = 18,
+        face = "bold"
+      )
+  )
+
+ggsave(
+  "Kang18_data_umap1.png",
+  last_plot(),
+  path = "../../outs/kang/",
+  width = 7,
+  height = 5,
+  dpi = 300
+)
+```
+
+```{r}
+ggplot(
+  data = cd,
+  mapping = aes(x = TSNE1, y = TSNE2, shape = group_id, colour = cluster_id)
+) +
+  geom_point(size = 1, alpha = 0.7) +
+  scale_colour_manual(values = cbf_palette[1:8]) +
+  labs(title = "Kang18 Data",
+       x = "TSNE1",
+       y = "TSNE2",
+       shape = "Treatment",
+       colour = "Cell Type") +
+  theme_classic() +
+  theme(
+    text = element_text(size = 16),
+    plot.title = element_text(
+        hjust = 0.5,
+        size = 18,
+        face = "bold"
+      )
+  )
+
+ggsave(
+  "Kang18_data_tsne1.png",
+  last_plot(),
+  path = "../../outs/kang/",
+  width = 7,
+  height = 5,
+  dpi = 300
+)
+```
+
+```{r}
+ggplot(
+  data = cd,
+  mapping = aes(x = UMAP1, y = UMAP2, colour = sample_id)
+) +
+  geom_point(size = 1, alpha = 0.7) +
+  scale_colour_manual(values = cbf_palette[1:8]) +
+  labs(title = "Kang18 Data",
+       x = "UMAP1",
+       y = "UMAP2",
        colour = "Sample") +
-  theme_bw() +
-  theme(plot.title = element_text(hjust = 0.5))
+  theme_classic() +
+  theme(
+    text = element_text(size = 16),
+    plot.title = element_text(
+        hjust = 0.5,
+        size = 18,
+        face = "bold"
+      )
+  )
+
+ggsave(
+  "Kang18_data_umap2.png",
+  last_plot(),
+  path = "../../outs/kang/",
+  width = 7,
+  height = 5,
+  dpi = 300
+)
+```
+
+```{r}
+ggplot(
+  data = cd,
+  mapping = aes(x = TSNE1, y = TSNE2, colour = sample_id)
+) +
+  geom_point(size = 1, alpha = 0.7) +
+  scale_colour_manual(values = cbf_palette[1:8]) +
+  labs(title = "Kang18 Data",
+       x = "TSNE1",
+       y = "TSNE2",
+       colour = "Sample") +
+  theme_classic() +
+  theme(
+    text = element_text(size = 16),
+    plot.title = element_text(
+        hjust = 0.5,
+        size = 18,
+        face = "bold"
+      )
+  )
+
+ggsave(
+  "Kang18_data_tsne2.png",
+  last_plot(),
+  path = "../../outs/kang/",
+  width = 7,
+  height = 5,
+  dpi = 300
+)
 ```
 
 ## Export Objects for Use in Python
@@ -83,3 +219,18 @@ writeH5AD(sce, sce_file)
 write.csv(cd, "../../data/kang/01-pro/Kang18-cd.csv", row.names = TRUE)
 write.csv(rd, "../../data/kang/01-pro/Kang18-rd.csv", row.names = TRUE)
 ```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
