@@ -82,7 +82,7 @@ class Objective:
         batch_size = trial.suggest_categorical("batch_size", self.batch_sizes)
 
         # setup workflow
-        logging.info(f"Running trial with lr: {lr}, epochs: {epochs}, batch_size: {batch_size}, data shape: {self.adata.shape}")
+        logging.info(f"Running trial with lr: {lr}, epochs: {epochs}, batch_size: {batch_size}, data shape: {self.adata.shape}, factors: {self.factors}")
         workflow = InterpretableWorkflow(
             self.adata.copy(), 
             verbose=True, 
