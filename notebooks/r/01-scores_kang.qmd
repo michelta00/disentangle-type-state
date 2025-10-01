@@ -536,7 +536,7 @@ all_selections <- lapply(patches_selections, function(df) {
   )
   
   # add all selection as baseline for downstream analyses
-  new_df$All <- TRUE
+  new_df$all_genes <- TRUE
   
   return(new_df)
   
@@ -656,7 +656,8 @@ selections_clu_con <- c(
   "tMAV",
   "tEN",
   "tMAV_sMAV",
-  "tEN_sEN"
+  "tEN_sEN",
+  "all_genes"
 )
 
 selections_con <- c(
@@ -666,7 +667,8 @@ selections_con <- c(
   "tF_sPVE",
   "tF_sPBDS",
   "tPVE_sPVE",
-  "common_score"
+  "common_score",
+  "all_genes"
 )
 ```
 
@@ -720,7 +722,7 @@ p1 <- ari_scores$Kang18_clu_con %>%
     geom_col(fill = "steelblue") +
     coord_flip() +
     theme_minimal() +
-    labs(x = "Selection", y = "ARI", title = "Cell Types & Conditions")
+    labs(x = "", y = "ARI", title = "Cell Types & Conditions")
 
 p1
 ```
@@ -731,7 +733,7 @@ p2 <- ari_scores$Kang18_con %>%
     geom_col(fill = "steelblue") +
     coord_flip() +
     theme_minimal() +
-    labs(x = "Selection", y = "ARI", title = "Conditions")
+    labs(x = "", y = "ARI", title = "Conditions")
 
 p2
 ```
@@ -762,7 +764,7 @@ combined_plot <- wrap_plots(ari_plots, ncol = 2, guides = "collect") +
 
 # save and show combined plot
 ggsave("sel_ari.png", combined_plot, path = "../../outs/kang/",
-       width = 10, height = 5, dpi = 300)
+       width = 12, height = 5, dpi = 300)
 combined_plot
 ```
 
