@@ -27,6 +27,7 @@ suppressPackageStartupMessages({
   library(SingleCellExperiment)
   library(MLVSBM)
   library(tidyverse)
+  library(viridis)
   library(GGally)
   library(rlang)
 })
@@ -286,8 +287,8 @@ cor_plots <- Map(function(p, sub) p + ggtitle(sub), cor_plots, subtitles)
 
 cor_plots <- lapply(cor_plots, function(p) {
   p + theme(
-    text = element_text(size = 15),
-    plot.title = element_text(size = 15)
+    text = element_text(size = 16),
+    plot.title = element_text(size = 18)
   )
 })
 
@@ -298,7 +299,7 @@ combined_plot <- wrap_plots(cor_plots, ncol = 1, guides = "collect") +
       plot.title = element_text(
         hjust = 0.5,
         margin = margin(b = 30),
-        size = 17,
+        size = 20,
         face = "bold"
       )
     )
@@ -534,6 +535,9 @@ all_selections <- lapply(patches_selections, function(df) {
       select(!gene_id)
   )
   
+  # add all selection as baseline for downstream analyses
+  new_df$All <- TRUE
+  
   return(new_df)
   
 })
@@ -552,7 +556,7 @@ plot_overlaps <- function(df, title) {
   fss_cols <- c("random", "HVG", "tF_sPBDS", "tF_sPVE", "tF", "tPVE_sPVE")
   
   # Patches selections
-  patches_cols <- setdiff(colnames(df), fss_cols)
+  patches_cols <- setdiff(colnames(df), c(fss_cols, "All"))
 
   # compute overlaps
   overlap_df <- expand.grid(Patches = patches_cols, FSS = fss_cols, stringsAsFactors = FALSE) %>% 
@@ -567,10 +571,10 @@ plot_overlaps <- function(df, title) {
   ggplot(overlap_df, aes(x = Patches, y = FSS, fill = Overlap)) +
     geom_tile(color = "white") +
     geom_text(aes(label = Overlap), color = "black") +
-    scale_fill_gradient(low = "white", high = "steelblue") +
+    scale_fill_viridis_c(option = "C", direction = -1) +
     theme_minimal() +
     theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-    labs(title = title)
+    labs(title = title, x = "", y = "")
   
 }
 ```
@@ -607,10 +611,11 @@ overlap_plots <- lapply(overlap_plots, function(p) {
   )
 })
 
-combined_plot <- wrap_plots(overlap_plots, ncol = 2, guides = "collect") +
+combined_plot <- wrap_plots(overlap_plots, ncol = 1, guides = "collect") +
   plot_annotation(
-    title = "Overlap of Selected Genes",
+    title = "Overlap of Selected Genes (n = 2000)",
     theme = theme(
+      legend.position = "none",
       plot.title = element_text(
         hjust = 0.5,
         margin = margin(b = 30),
@@ -622,7 +627,7 @@ combined_plot <- wrap_plots(overlap_plots, ncol = 2, guides = "collect") +
 
 # save and show combined plot
 ggsave("sel_overlap.png", combined_plot, path = "../../outs/kang/",
-       width = 15, height = 9, dpi = 300)
+       width = 9, height = 8, dpi = 300)
 combined_plot
 ```
 

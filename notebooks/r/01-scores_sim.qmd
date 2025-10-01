@@ -27,6 +27,7 @@ suppressPackageStartupMessages({
   library(SingleCellExperiment)
   library(MLVSBM)
   library(tidyverse)
+  library(viridis)
   library(GGally)
   library(rlang)
 })
@@ -647,6 +648,9 @@ all_selections <- lapply(patches_selections, function(df) {
     
   }
   
+  # add all selection as baseline for downstream analyses
+  new_df$All <- TRUE
+  
   return(new_df)
   
 })
@@ -694,10 +698,10 @@ plot_overlaps <- function(df, title) {
   ggplot(overlap_df, aes(x = Score, y = GroundTruth, fill = Overlap)) +
     geom_tile(color = "white") +
     geom_text(aes(label = Overlap), color = "black") +
-    scale_fill_gradient(low = "white", high = "steelblue") +
+    scale_fill_viridis_c(option = "C", direction = -1) +
     theme_minimal() +
     theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-    labs(title = title)
+    labs(title = title, x = "", y = "")
   
 }
 ```
@@ -768,6 +772,7 @@ combined_plot <- wrap_plots(overlap_plots, ncol = 2, guides = "collect") +
   plot_annotation(
     title = "Overlap of Selected Genes",
     theme = theme(
+      legend.position = "none",
       plot.title = element_text(
         hjust = 0.5,
         margin = margin(b = 30),
@@ -779,7 +784,7 @@ combined_plot <- wrap_plots(overlap_plots, ncol = 2, guides = "collect") +
 
 # save and show combined plot
 ggsave("sel_overlap.png", combined_plot, path = "../../outs/sim/",
-       width = 15, height = 9, dpi = 300)
+       width = 14, height = 9, dpi = 300)
 combined_plot
 ```
 
@@ -880,12 +885,11 @@ p1 <- bind_cols(
   rename(Full = F1...2, HVG = F1...3) %>% 
   pivot_longer(cols = c(Full, HVG), names_to = "Data", values_to = "F1") %>% 
   ggplot(aes(x = reorder(Selection, F1), y = F1, fill = Data)) +
-    geom_col(aes(alpha = Data), position = position_dodge(width = 0.8)) +
+    geom_col(position = position_dodge(width = 0.8)) +
     coord_flip() +
     scale_fill_manual(values = c("steelblue", "darkgrey")) +
-    scale_alpha_manual(values = c(1, 0.6), name = "Data") +
     theme_minimal() +
-    labs(x = "Selection", y = "F1", title = "Groups & Conditions")
+    labs(x = "", y = "F1", title = "Groups & Conditions")
 
 p1
 ```
@@ -898,12 +902,11 @@ p2 <- bind_cols(
   rename(Full = F1...2, HVG = F1...3) %>% 
   pivot_longer(cols = c(Full, HVG), names_to = "Data", values_to = "F1") %>% 
   ggplot(aes(x = reorder(Selection, F1), y = F1, fill = Data)) +
-    geom_col(aes(alpha = Data), position = position_dodge(width = 0.8)) +
+    geom_col(position = position_dodge(width = 0.8)) +
     coord_flip() +
     scale_fill_manual(values = c("steelblue", "darkgrey")) +
-    scale_alpha_manual(values = c(1, 0.6), name = "Data") +
     theme_minimal() +
-    labs(x = "Selection", y = "F1", title = "Conditions")
+    labs(x = "", y = "F1", title = "Conditions")
 
 p2
 ```
@@ -934,7 +937,7 @@ combined_plot <- wrap_plots(f1_plots, ncol = 2, guides = "collect") +
 
 # save and show combined plot
 ggsave("sel_f1.png", combined_plot, path = "../../outs/sim/",
-       width = 10, height = 5, dpi = 300)
+       width = 12, height = 5, dpi = 300)
 combined_plot
 ```
 

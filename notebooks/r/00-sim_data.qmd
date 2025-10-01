@@ -81,11 +81,11 @@ ggplot(
 ) +
   geom_point(size = 1.4, alpha = 0.7) +
   scale_colour_manual(values = cbf_palette[1:2]) +
-  labs(title = "Simulation Data",
+  labs(title = "",
        x = "PC1",
        y = "PC2",
-       shape = "Group/Type",
-       colour = "Condition/State") +
+       shape = "Group (Type)",
+       colour = "Condition (State)") +
   theme_classic() +
   theme(
     text = element_text(size = 16),
@@ -94,6 +94,10 @@ ggplot(
         size = 18,
         face = "bold"
       )
+  ) +
+  guides(
+    colour = guide_legend(override.aes = list(size = 3)),
+    shape = guide_legend(override.aes = list(size = 3))
   )
 
 ggsave(
@@ -113,7 +117,7 @@ ggplot(
 ) +
   geom_point(size = 1.4, alpha = 0.7) +
   scale_colour_manual(values = cbf_palette[3:8]) +
-  labs(title = "Simulation Data",
+  labs(title = "",
        x = "PC1",
        y = "PC2",
        colour = "Sample") +
@@ -125,6 +129,10 @@ ggplot(
         size = 18,
         face = "bold"
       )
+  ) +
+  guides(
+    colour = guide_legend(override.aes = list(size = 3)),
+    shape = guide_legend(override.aes = list(size = 3))
   )
 
 ggsave(

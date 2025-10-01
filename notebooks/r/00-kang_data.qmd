@@ -89,7 +89,7 @@ ggplot(
 ) +
   geom_point(size = 1, alpha = 0.7) +
   scale_colour_manual(values = cbf_palette[1:8]) +
-  labs(title = "Kang18 Data",
+  labs(title = "",
        x = "UMAP1",
        y = "UMAP2",
        shape = "Treatment",
@@ -102,6 +102,10 @@ ggplot(
         size = 18,
         face = "bold"
       )
+  ) +
+  guides(
+    colour = guide_legend(override.aes = list(size = 3)),
+    shape = guide_legend(override.aes = list(size = 3))
   )
 
 ggsave(
@@ -121,7 +125,7 @@ ggplot(
 ) +
   geom_point(size = 1, alpha = 0.7) +
   scale_colour_manual(values = cbf_palette[1:8]) +
-  labs(title = "Kang18 Data",
+  labs(title = "",
        x = "TSNE1",
        y = "TSNE2",
        shape = "Treatment",
@@ -134,6 +138,10 @@ ggplot(
         size = 18,
         face = "bold"
       )
+  ) +
+  guides(
+    colour = guide_legend(override.aes = list(size = 3)),
+    shape = guide_legend(override.aes = list(size = 3))
   )
 
 ggsave(
@@ -153,7 +161,7 @@ ggplot(
 ) +
   geom_point(size = 1, alpha = 0.7) +
   scale_colour_manual(values = cbf_palette[1:8]) +
-  labs(title = "Kang18 Data",
+  labs(title = "",
        x = "UMAP1",
        y = "UMAP2",
        colour = "Sample") +
@@ -165,6 +173,10 @@ ggplot(
         size = 18,
         face = "bold"
       )
+  ) +
+  guides(
+    colour = guide_legend(override.aes = list(size = 3)),
+    shape = guide_legend(override.aes = list(size = 3))
   )
 
 ggsave(
@@ -184,7 +196,7 @@ ggplot(
 ) +
   geom_point(size = 1, alpha = 0.7) +
   scale_colour_manual(values = cbf_palette[1:8]) +
-  labs(title = "Kang18 Data",
+  labs(title = "",
        x = "TSNE1",
        y = "TSNE2",
        colour = "Sample") +
@@ -196,6 +208,10 @@ ggplot(
         size = 18,
         face = "bold"
       )
+  ) +
+  guides(
+    colour = guide_legend(override.aes = list(size = 3)),
+    shape = guide_legend(override.aes = list(size = 3))
   )
 
 ggsave(
