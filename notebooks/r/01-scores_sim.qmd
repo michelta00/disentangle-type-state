@@ -1191,16 +1191,22 @@ selections_clu_con <- c(
   "tMAV",
   "tEN",
   "tMAV_sMAV",
-  "tEN_sEN"
+  "tEN_sEN",
+  "sMAV",
+  "sEN",
+  "sMAV_tMAV",
+  "sEN_tEN"
 )
 
 selections_con <- c(
-  "common_score"
+  "common_score",
+  "sMAV",
+  "sEN"
 )
 ```
 
 ```{r}
-umap_tsne_plots <- lapply(all_selections, function(df) {
+umap_plots <- lapply(all_selections, function(df) {
   
   # determine if df holds group and condition selections or only condition selections
   if ("Group1_score" %in% colnames(df)) {
@@ -1230,8 +1236,7 @@ umap_tsne_plots <- lapply(all_selections, function(df) {
     # dimensionality reduction
     sce_iter <- runPCA(sce_iter, subset_row=df[[selection]])
     sce_iter <- runUMAP(sce_iter, dimred="PCA")
-    sce_iter <- runTSNE(sce_iter, dimred="PCA")
-    
+
     # create UMAP plot colored by condition
     plot1 <- ggplot(
       data = as.data.frame(reducedDim(sce_iter, "UMAP")),
@@ -1274,54 +1279,10 @@ umap_tsne_plots <- lapply(all_selections, function(df) {
           )
       )
     
-    # create TSNE plot colored by condition
-    plot3 <- ggplot(
-      data = as.data.frame(reducedDim(sce_iter, "TSNE")),
-      mapping = aes(x = TSNE1, y = TSNE2, colour = sce_iter$group_id)
-    ) +
-      geom_point(size = 1, alpha = 0.7) +
-      scale_colour_manual(values = cbf_palette[1:8]) +
-      labs(title = selection,
-           x = "TSNE1",
-           y = "TSNE2",
-           colour = "Condition") +
-      theme_classic() +
-      theme(
-        text = element_text(size = 16),
-        plot.title = element_text(
-            hjust = 0.5,
-            size = 18,
-            face = "bold"
-          )
-      )
-    
-    # create TSNE plot colored by cell type
-    plot4 <- ggplot(
-      data = as.data.frame(reducedDim(sce_iter, "TSNE")),
-      mapping = aes(x = TSNE1, y = TSNE2, colour = sce_iter$cluster_id)
-    ) +
-      geom_point(size = 1, alpha = 0.7) +
-      scale_colour_manual(values = cbf_palette[1:8]) +
-      labs(title = selection,
-           x = "TSNE1",
-           y = "TSNE2",
-           colour = "Group") +
-      theme_classic() +
-      theme(
-        text = element_text(size = 16),
-        plot.title = element_text(
-            hjust = 0.5,
-            size = 18,
-            face = "bold"
-          )
-      )
-    
     plots <- c(
       plots,
       plot1,
-      plot2,
-      plot3,
-      plot4
+      plot2
     )
     
   }
@@ -1331,9 +1292,21 @@ umap_tsne_plots <- lapply(all_selections, function(df) {
 })
 ```
 
+```{r}
+umap_plots$patches_clu_con_full
+```
 
+```{r}
+umap_plots$patches_clu_con_hvg
+```
 
+```{r}
+umap_plots$patches_con_full
+```
 
+```{r}
+umap_plots$patches_con_hvg
+```
 
 
 
