@@ -897,11 +897,18 @@ selections_clu_con <- c(
   "tMAV",
   "tEN",
   "tMAV_sMAV",
-  "tEN_sEN"
+  "tEN_sEN",
+  "sMAV",
+  "sEN",
+  "sMAV_tMAV",
+  "sEN_tEN",
+  "all_genes"
 )
 
 selections_con <- c(
-  "common_score"
+  "common_score",
+  "sMAV",
+  "sEN"
 )
 ```
 
@@ -937,13 +944,16 @@ umap_tsne_plots <- lapply(all_selections, function(df) {
       mapping = aes(x = UMAP1, y = UMAP2, colour = sce_iter$group_id)
     ) +
       geom_point(size = 1, alpha = 0.7) +
-      scale_colour_manual(values = cbf_palette[1:8]) +
-      labs(title = selection,
+      scale_colour_manual(values = cbf_palette[1:2]) +
+      labs(title = "",
            x = "UMAP1",
            y = "UMAP2",
            colour = "Treatment") +
       theme_classic() +
       theme(
+        axis.ticks = element_blank(),
+        axis.text = element_blank(),
+        legend.position = "none",
         text = element_text(size = 16),
         plot.title = element_text(
             hjust = 0.5,
@@ -958,17 +968,20 @@ umap_tsne_plots <- lapply(all_selections, function(df) {
       mapping = aes(x = UMAP1, y = UMAP2, colour = sce_iter$cluster_id)
     ) +
       geom_point(size = 1, alpha = 0.7) +
-      scale_colour_manual(values = cbf_palette[1:8]) +
+      scale_colour_manual(values = cbf_palette[3:10]) +
       labs(title = selection,
-           x = "UMAP1",
+           x = "",
            y = "UMAP2",
            colour = "Cell Type") +
       theme_classic() +
       theme(
+        axis.ticks = element_blank(),
+        axis.text = element_blank(),
+        legend.position = "none",
         text = element_text(size = 16),
         plot.title = element_text(
             hjust = 0.5,
-            size = 18,
+            size = 20,
             face = "bold"
           )
       )
@@ -979,17 +992,20 @@ umap_tsne_plots <- lapply(all_selections, function(df) {
       mapping = aes(x = TSNE1, y = TSNE2, colour = sce_iter$group_id)
     ) +
       geom_point(size = 1, alpha = 0.7) +
-      scale_colour_manual(values = cbf_palette[1:8]) +
-      labs(title = selection,
+      scale_colour_manual(values = cbf_palette[1:2]) +
+      labs(title = "",
            x = "TSNE1",
            y = "TSNE2",
            colour = "Treatment") +
       theme_classic() +
       theme(
+        axis.ticks = element_blank(),
+        axis.text = element_blank(),
+        legend.position = "none",
         text = element_text(size = 16),
         plot.title = element_text(
             hjust = 0.5,
-            size = 18,
+            size = 20,
             face = "bold"
           )
       )
@@ -1000,17 +1016,20 @@ umap_tsne_plots <- lapply(all_selections, function(df) {
       mapping = aes(x = TSNE1, y = TSNE2, colour = sce_iter$cluster_id)
     ) +
       geom_point(size = 1, alpha = 0.7) +
-      scale_colour_manual(values = cbf_palette[1:8]) +
+      scale_colour_manual(values = cbf_palette[3:10]) +
       labs(title = selection,
-           x = "TSNE1",
+           x = "",
            y = "TSNE2",
            colour = "Cell Type") +
       theme_classic() +
       theme(
+        axis.ticks = element_blank(),
+        axis.text = element_blank(),
+        legend.position = "none",
         text = element_text(size = 16),
         plot.title = element_text(
             hjust = 0.5,
-            size = 18,
+            size = 20,
             face = "bold"
           )
       )
@@ -1030,7 +1049,22 @@ umap_tsne_plots <- lapply(all_selections, function(df) {
 })
 ```
 
+```{r}
+umap_tsne_plots$Kang18_clu_con
+```
 
+```{r}
+for (i in 1:length(umap_tsne_plots$Kang18_clu_con)) {
+  file_name <- paste0("umap_", i, ".png")
+  
+  ggsave(file_name, umap_tsne_plots$Kang18_clu_con[i], path = "../../outs/kang/umap/",
+         width = 4, height = 4, dpi = 300)
+}
+```
+
+```{r}
+umap_tsne_plots$Kang18_con
+```
 
 
 

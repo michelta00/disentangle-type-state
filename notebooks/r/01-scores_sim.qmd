@@ -1426,7 +1426,8 @@ selections_clu_con <- c(
   "sMAV",
   "sEN",
   "sMAV_tMAV",
-  "sEN_tEN"
+  "sEN_tEN",
+  "all_genes"
 )
 
 selections_con <- c(
@@ -1474,38 +1475,44 @@ umap_plots <- lapply(all_selections, function(df) {
       mapping = aes(x = UMAP1, y = UMAP2, colour = sce_iter$group_id)
     ) +
       geom_point(size = 1, alpha = 0.7) +
-      scale_colour_manual(values = cbf_palette[1:8]) +
-      labs(title = selection,
+      scale_colour_manual(values = cbf_palette[1:2]) +
+      labs(title = "",
            x = "UMAP1",
            y = "UMAP2",
            colour = "Condition") +
       theme_classic() +
       theme(
+        axis.ticks = element_blank(),
+        axis.text = element_blank(),
+        legend.position = "none",
         text = element_text(size = 16),
         plot.title = element_text(
             hjust = 0.5,
-            size = 18,
+            size = 20,
             face = "bold"
           )
       )
     
-    # create UMAP plot colored by cell type
+    # create UMAP plot colored by group
     plot2 <- ggplot(
       data = as.data.frame(reducedDim(sce_iter, "UMAP")),
       mapping = aes(x = UMAP1, y = UMAP2, colour = sce_iter$cluster_id)
     ) +
       geom_point(size = 1, alpha = 0.7) +
-      scale_colour_manual(values = cbf_palette[1:8]) +
+      scale_colour_manual(values = cbf_palette[c(3, 5, 7)]) +
       labs(title = selection,
-           x = "UMAP1",
+           x = "",
            y = "UMAP2",
            colour = "Group") +
       theme_classic() +
       theme(
+        axis.ticks = element_blank(),
+        axis.text = element_blank(),
+        legend.position = "none",
         text = element_text(size = 16),
         plot.title = element_text(
             hjust = 0.5,
-            size = 18,
+            size = 20,
             face = "bold"
           )
       )
@@ -1525,6 +1532,15 @@ umap_plots <- lapply(all_selections, function(df) {
 
 ```{r}
 umap_plots$patches_clu_con_full
+```
+
+```{r}
+for (i in 1:length(umap_plots$patches_clu_con_full)) {
+  file_name <- paste0("umap_", i, ".png")
+  
+  ggsave(file_name, umap_plots$patches_clu_con_full[i], path = "../../outs/sim/umap/",
+         width = 4, height = 4, dpi = 300)
+}
 ```
 
 ```{r}
