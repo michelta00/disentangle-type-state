@@ -367,7 +367,7 @@ cor_plots_z <- lapply(cor_plots_z, function(p) {
   )
 })
 
-combined_plot <- wrap_plots(cor_plots_z, ncol = 1, guides = "collect") +
+combined_plot <- wrap_plots(cor_plots_z, ncol = 2, guides = "collect") +
   plot_annotation(
     title = "Spearman Correlation of Z-Transformed Scores",
     theme = theme(
@@ -382,7 +382,7 @@ combined_plot <- wrap_plots(cor_plots_z, ncol = 1, guides = "collect") +
 
 # save and show combined plot
 ggsave("sco_cor_z.png", combined_plot, path = "../../outs/kang/",
-       width = 10, height = 14, dpi = 300)
+       width = 18, height = 8, dpi = 300)
 combined_plot
 ```
 
@@ -466,7 +466,7 @@ j_plots <- lapply(j_plots, function(p) {
   )
 })
 
-combined_plot <- wrap_plots(j_plots, ncol = 1, guides = "collect") +
+combined_plot <- wrap_plots(j_plots, ncol = 2, guides = "collect") +
   plot_annotation(
     title = "Jaccard Index of Top-100 Genes",
     theme = theme(
@@ -481,7 +481,7 @@ combined_plot <- wrap_plots(j_plots, ncol = 1, guides = "collect") +
 
 # save and show combined plot
 ggsave("sco_jaccard.png", combined_plot, path = "../../outs/kang/",
-       width = 10, height = 14, dpi = 300)
+       width = 18, height = 8, dpi = 300)
 combined_plot
 ```
 
