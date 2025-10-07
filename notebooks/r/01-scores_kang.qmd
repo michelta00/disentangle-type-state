@@ -557,6 +557,11 @@ patches_selections <- lapply(patches_scores, function(score_df) {
   binary_df <- score_df
   for (col in names(score_df)) {
     
+    # skip gene id column
+    if (col == "gene_id") {
+      next
+    }
+    
     # convert score into binary predictions
     scores <- score_df[[col]]
     cutoff <- sort(scores, decreasing = TRUE)[n]
@@ -604,6 +609,36 @@ patches_selections <- lapply(patches_scores, function(score_df) {
     
   }
   
+  # difference in rank of common score and condition scores
+  com_con <- c("common_score", "sMAV", "sEN")
+  if (all(com_con %in% colnames(score_df)) && !("B_cells_score" %in% colnames(score_df))) {
+    
+    t <- rank(score_df[[com_con[1]]])
+    s1 <- rank(score_df[[com_con[2]]])
+    s2 <- rank(score_df[[com_con[3]]])
+    
+    # common - sMAV
+    scores <- t - s1
+    cutoff <- sort(scores, decreasing = TRUE)[n]
+    binary_df$common_sMAV <- scores >= cutoff
+    
+    # common - sEN
+    scores <- t - s2
+    cutoff <- sort(scores, decreasing = TRUE)[n]
+    binary_df$common_sEN <- scores >= cutoff
+    
+    # sMAV - common
+    scores <- s1 - t
+    cutoff <- sort(scores, decreasing = TRUE)[n]
+    binary_df$sMAV_common <- scores >= cutoff
+    
+    # sEN - common
+    scores <- s2 - t
+    cutoff <- sort(scores, decreasing = TRUE)[n]
+    binary_df$sEN_common <- scores >= cutoff
+    
+  }
+  
   return(binary_df)
   
 })
@@ -645,7 +680,7 @@ plot_overlaps <- function(df, title) {
   fss_cols <- c("random", "HVG", "tF_sPBDS", "tF_sPVE", "tF", "tPVE_sPVE")
   
   # Patches selections
-  patches_cols <- setdiff(colnames(df), c(fss_cols, "All"))
+  patches_cols <- setdiff(colnames(df), c(fss_cols, "all_genes"))
 
   # compute overlaps
   overlap_df <- expand.grid(Patches = patches_cols, FSS = fss_cols, stringsAsFactors = FALSE) %>% 
