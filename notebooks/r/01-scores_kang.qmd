@@ -792,7 +792,9 @@ selections_con <- c(
   "tF_sPBDS",
   "tPVE_sPVE",
   "common_score",
-  "all_genes"
+  "all_genes",
+  "common_sMAV",
+  "common_sEN"
 )
 ```
 
@@ -943,7 +945,11 @@ selections_clu_con <- c(
 selections_con <- c(
   "common_score",
   "sMAV",
-  "sEN"
+  "sEN",
+  "common_sMAV",
+  "common_sEN",
+  "sMAV_common",
+  "sEN_common"
 )
 ```
 
@@ -1092,7 +1098,7 @@ umap_tsne_plots$Kang18_clu_con
 for (i in 1:length(umap_tsne_plots$Kang18_clu_con)) {
   file_name <- paste0("umap_", i, ".png")
   
-  ggsave(file_name, umap_tsne_plots$Kang18_clu_con[i], path = "../../outs/kang/umap/",
+  ggsave(file_name, umap_tsne_plots$Kang18_clu_con[i], path = "../../outs/kang/umap_clu_con/",
          width = 4, height = 4, dpi = 300)
 }
 ```
@@ -1101,7 +1107,14 @@ for (i in 1:length(umap_tsne_plots$Kang18_clu_con)) {
 umap_tsne_plots$Kang18_con
 ```
 
-
+```{r}
+for (i in 1:length(umap_tsne_plots$Kang18_con)) {
+  file_name <- paste0("umap_", i, ".png")
+  
+  ggsave(file_name, umap_tsne_plots$Kang18_con[i], path = "../../outs/kang/umap_con/",
+         width = 4, height = 4, dpi = 300)
+}
+```
 
 
 

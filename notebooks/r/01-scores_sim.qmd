@@ -1235,7 +1235,9 @@ selections_con <- c(
   "tF_sPBDS",
   "tPVE_sPVE",
   "common_score",
-  "all_genes"
+  "all_genes",
+  "common_sMAV",
+  "common_sEN"
 )
 ```
 
@@ -1469,7 +1471,9 @@ selections_con <- c(
   "sMAV",
   "sEN",
   "common_sMAV",
-  "common_sEN"
+  "common_sEN",
+  "sMAV_common",
+  "sEN_common"
 )
 ```
 
@@ -1574,7 +1578,7 @@ umap_plots$patches_clu_con_full
 for (i in 1:length(umap_plots$patches_clu_con_full)) {
   file_name <- paste0("umap_", i, ".png")
   
-  ggsave(file_name, umap_plots$patches_clu_con_full[i], path = "../../outs/sim/umap/",
+  ggsave(file_name, umap_plots$patches_clu_con_full[i], path = "../../outs/sim/umap_clu_con/",
          width = 4, height = 4, dpi = 300)
 }
 ```
@@ -1585,6 +1589,15 @@ umap_plots$patches_clu_con_hvg
 
 ```{r}
 umap_plots$patches_con_full
+```
+
+```{r}
+for (i in 1:length(umap_plots$patches_con_full)) {
+  file_name <- paste0("umap_", i, ".png")
+  
+  ggsave(file_name, umap_plots$patches_con_full[i], path = "../../outs/sim/umap_con/",
+         width = 4, height = 4, dpi = 300)
+}
 ```
 
 ```{r}
