@@ -85,6 +85,111 @@ cbf_palette = c(
 ```{r}
 ggplot(
   data = cd,
+  mapping = aes(x = UMAP1, y = UMAP2, colour = cluster_id)
+) +
+  geom_point(size = 1, alpha = 0.7) +
+  scale_colour_manual(values = cbf_palette[3:10]) +
+  labs(title = "",
+       x = "UMAP1",
+       y = "UMAP2",
+       colour = "Cell Type") +
+  theme_classic() +
+  theme(
+    text = element_text(size = 16),
+    plot.title = element_text(
+        hjust = 0.5,
+        size = 18,
+        face = "bold"
+      )
+  ) +
+  guides(
+    colour = guide_legend(override.aes = list(size = 3)),
+  )
+
+ggsave(
+  "Kang18_data_umap_types.png",
+  last_plot(),
+  path = "../../outs/kang/",
+  width = 6,
+  height = 5,
+  dpi = 300
+)
+```
+
+```{r}
+ggplot(
+  data = cd,
+  mapping = aes(x = UMAP1, y = UMAP2, colour = group_id)
+) +
+  geom_point(size = 1, alpha = 0.7) +
+  scale_colour_manual(values = cbf_palette[1:2]) +
+  labs(title = "",
+       x = "UMAP1",
+       y = "UMAP2",
+       colour = "Treatment") +
+  theme_classic() +
+  theme(
+    text = element_text(size = 16),
+    plot.title = element_text(
+        hjust = 0.5,
+        size = 18,
+        face = "bold"
+      )
+  ) +
+  guides(
+    colour = guide_legend(override.aes = list(size = 3)),
+  )
+
+ggsave(
+  "Kang18_data_umap_states.png",
+  last_plot(),
+  path = "../../outs/kang/",
+  width = 5,
+  height = 5,
+  dpi = 300
+)
+```
+
+```{r}
+cd %>% 
+  mutate(
+    s = paste(group_id, sample_id, sep = "_")
+  ) %>% 
+  ggplot(
+    mapping = aes(x = UMAP1, y = UMAP2, colour = s)
+  ) +
+    geom_point(size = 1, alpha = 0.7) +
+    scale_colour_manual(values = cbf_palette[1:8]) +
+    labs(title = "",
+         x = "UMAP1",
+         y = "UMAP2",
+         colour = "Sample") +
+    theme_classic() +
+    theme(
+      text = element_text(size = 16),
+      plot.title = element_text(
+          hjust = 0.5,
+          size = 18,
+          face = "bold"
+        )
+    ) +
+    guides(
+      colour = guide_legend(override.aes = list(size = 3)),
+    )
+
+ggsave(
+  "Kang18_data_umap_samples.png",
+  last_plot(),
+  path = "../../outs/kang/",
+  width = 5,
+  height = 5,
+  dpi = 300
+)
+```
+
+```{r}
+ggplot(
+  data = cd,
   mapping = aes(x = UMAP1, y = UMAP2, shape = group_id, colour = cluster_id)
 ) +
   geom_point(size = 1, alpha = 0.7) +
