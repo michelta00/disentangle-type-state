@@ -69,7 +69,7 @@ load_process_patches_scores <- function(file) {
       )
     )
   
-  # Euclidean norm for condition
+  ## Euclidean norm for condition
   df <- df %>% 
     mutate(
       sEN = sqrt(
@@ -77,11 +77,16 @@ load_process_patches_scores <- function(file) {
           Condition2_score^2
       )
     )
+  
+  ## absolute difference for condition
+  df <- df %>% 
+    mutate(
+      sAD = abs(Condition1_score - Condition2_score))
     
   if ("Group1_score" %in% names(df)) {
-    ## cluster and condition scores available
+    # cluster and condition scores available
     
-    # max absolute value for group
+    ## max absolute value for group
     df <- df %>% 
       mutate(
         tMAV = pmax(
@@ -91,7 +96,7 @@ load_process_patches_scores <- function(file) {
         )
       )
     
-    # Euclidean norm for group
+    ## Euclidean norm for group
     df <- df %>% 
       mutate(
         tEN = sqrt(
@@ -100,6 +105,40 @@ load_process_patches_scores <- function(file) {
             Group3_score^2
         )
       )
+    
+    ## max absolute difference for group
+    # df <- df %>% 
+      # mutate(
+        # tXAD = pmax(
+          # abs(Group1_score - Group2_score),
+          # abs(Group1_score - Group3_score),
+          # abs(Group2_score - Group3_score)
+        # )
+      # )
+    
+    ## mean absolute difference for group
+    df <- df %>% 
+      mutate(
+        tMAD = rowMeans(
+          cbind(
+            abs(Group1_score - Group2_score),
+            abs(Group1_score - Group3_score),
+            abs(Group2_score - Group3_score)
+          )
+        )
+      )
+    
+    ## sum of absolute differences for group
+    # df <- df %>% 
+      # mutate(
+        # tSAD = rowSums(
+          # cbind(
+            # abs(Group1_score - Group2_score),
+            # abs(Group1_score - Group3_score),
+            # abs(Group2_score - Group3_score)
+          # )
+        # )
+      #)
     
   }
   
@@ -435,6 +474,41 @@ ggsave("sco_cor_z_full.png", combined_plot, path = "../../outs/sim/",
 combined_plot
 ```
 
+```{r}
+# combine individual plots
+subtitles <- c(
+  "Groups & Conditions",
+  "Conditions"
+)
+plots <- cor_plots_z[c(2, 4)]
+plots <- Map(function(p, sub) p + ggtitle(sub), plots, subtitles)
+
+plots <- lapply(plots, function(p) {
+  p + theme(
+    text = element_text(size = 16),
+    plot.title = element_text(size = 18)
+  )
+})
+
+combined_plot <- wrap_plots(plots, ncol = 2, guides = "collect") +
+  plot_annotation(
+    title = "Spearman Correlation of Z-Transformed Scores",
+    theme = theme(
+      plot.title = element_text(
+        hjust = 0.5,
+        margin = margin(b = 30),
+        size = 20,
+        face = "bold"
+      )
+    )
+  )
+
+# save and show combined plot
+ggsave("sco_cor_z_hvg.png", combined_plot, path = "../../outs/sim/",
+       width = 14, height = 6, dpi = 300)
+combined_plot
+```
+
 #### Overlap of top-n genes (Jaccard Index)
 
 ```{r}
@@ -572,6 +646,42 @@ ggsave("sco_jaccard_full.png", combined_plot, path = "../../outs/sim/",
 combined_plot
 ```
 
+```{r}
+# combine individual plots
+subtitles <- c(
+  "Groups & Conditions",
+  "Conditions"
+)
+
+plots <- j_plots[c(2, 4)]
+plots <- Map(function(p, sub) p + ggtitle(sub), plots, subtitles)
+
+plots <- lapply(plots, function(p) {
+  p + theme(
+    text = element_text(size = 16),
+    plot.title = element_text(size = 18)
+  )
+})
+
+combined_plot <- wrap_plots(plots, ncol = 2, guides = "collect") +
+  plot_annotation(
+    title = "Jaccard Index of Top-100 Genes",
+    theme = theme(
+      plot.title = element_text(
+        hjust = 0.5,
+        margin = margin(b = 30),
+        size = 20,
+        face = "bold"
+      )
+    )
+  )
+
+# save and show combined plot
+ggsave("sco_jaccard_hvg.png", combined_plot, path = "../../outs/sim/",
+       width = 14, height = 6, dpi = 300)
+combined_plot
+```
+
 
 
 ## Selections
@@ -676,10 +786,10 @@ patches_selections <- lapply(patches_scores, function(score_df) {
   for (col in names(score_df)) {
     
     # determine whether score is a type or state score and adjust n accordingly 
-    if (grepl("Group|group|common|tMAV|tEN", col)) {
+    if (grepl("Group|group|common|tMAV|tEN|tMAD", col)) {
       # score is a type score
       n <- nt
-    } else if (grepl("condition|Condition|sMAV|sEN", col)) {
+    } else if (grepl("condition|Condition|sMAV|sEN|sAD", col)) {
       # score is a state score
       n <- ns
     } else {
@@ -734,13 +844,33 @@ patches_selections <- lapply(patches_scores, function(score_df) {
     
   }
   
+  # difference in rank of absolute difference group and condition scores
+  abs_dif <- c("tMAD", "sAD")
+  if (all(abs_dif %in% colnames(score_df))) {
+    
+    t <- rank(score_df[[abs_dif[1]]])
+    s <- rank(score_df[[abs_dif[2]]])
+    
+    # type not state
+    scores <- t - s
+    cutoff <- sort(scores, decreasing = TRUE)[nt]
+    binary_df$tMAD_sAD <- scores >= cutoff
+    
+    # state not type
+    scores <- s - t
+    cutoff <- sort(scores, decreasing = TRUE)[ns]
+    binary_df$sAD_tMAD <- scores >= cutoff
+    
+  }
+  
   # difference in rank of common score and condition scores
-  com_con <- c("common_score", "sMAV", "sEN")
+  com_con <- c("common_score", "sMAV", "sEN", "sAD")
   if (all(com_con %in% colnames(score_df)) && !("Group1_score" %in% colnames(score_df))) {
     
     t <- rank(score_df[[com_con[1]]])
     s1 <- rank(score_df[[com_con[2]]])
     s2 <- rank(score_df[[com_con[3]]])
+    s3 <- rank(score_df[[com_con[4]]])
     
     # common - sMAV
     scores <- t - s1
@@ -752,6 +882,11 @@ patches_selections <- lapply(patches_scores, function(score_df) {
     cutoff <- sort(scores, decreasing = TRUE)[nt]
     binary_df$common_sEN <- scores >= cutoff
     
+    # common - sAD
+    scores <- t - s3
+    cutoff <- sort(scores, decreasing = TRUE)[nt]
+    binary_df$common_sAD <- scores >= cutoff
+    
     # sMAV - common
     scores <- s1 - t
     cutoff <- sort(scores, decreasing = TRUE)[ns]
@@ -762,7 +897,27 @@ patches_selections <- lapply(patches_scores, function(score_df) {
     cutoff <- sort(scores, decreasing = TRUE)[ns]
     binary_df$sEN_common <- scores >= cutoff
     
+    # sAD - common
+    scores <- s3 - t
+    cutoff <- sort(scores, decreasing = TRUE)[ns]
+    binary_df$sAD_common <- scores >= cutoff
+    
   }
+  
+  # remove selections not needed for downstream analyses
+  if ("Group1_score" %in% colnames(binary_df)) {
+    binary_df <- binary_df %>% 
+      select(
+        -Group1_score,
+        -Group2_score,
+        -Group3_score
+      )
+  }
+  binary_df <- binary_df %>% 
+    select(
+      -Condition1_score,
+      -Condition2_score
+    )
   
   return(binary_df)
   
@@ -974,6 +1129,42 @@ ggsave("sel_overlap_full.png", combined_plot, path = "../../outs/sim/",
 combined_plot
 ```
 
+```{r}
+# combine individual plots
+overlap_plots <- list(p2, p4)
+subtitles <- c(
+  "Groups & Conditions",
+  "Conditions"
+)
+overlap_plots <- Map(function(p, sub) p + ggtitle(sub), overlap_plots, subtitles)
+
+overlap_plots <- lapply(overlap_plots, function(p) {
+  p + theme(
+    text = element_text(size = 16),
+    plot.title = element_text(size = 18)
+  )
+})
+
+combined_plot <- wrap_plots(overlap_plots, ncol = 1, guides = "collect") +
+  plot_annotation(
+    title = "Overlap of Selected Genes",
+    theme = theme(
+      legend.position = "none",
+      plot.title = element_text(
+        hjust = 0.5,
+        margin = margin(b = 30),
+        size = 20,
+        face = "bold"
+      )
+    )
+  )
+
+# save and show combined plot
+ggsave("sel_overlap_hvg.png", combined_plot, path = "../../outs/sim/",
+       width = 9, height = 8, dpi = 300)
+combined_plot
+```
+
 #### F1 Scores
 
 ```{r}
@@ -988,12 +1179,16 @@ selections_clu_con <- c(
   "common_score",
   "sMAV",
   "sEN",
+  "sAD",
   "tMAV",
   "tEN",
+  "tMAD",
   "tMAV_sMAV",
   "sMAV_tMAV",
   "tEN_sEN",
-  "sEN_tEN"
+  "sEN_tEN",
+  "tMAD_sAD",
+  "sAD_tMAD"
 )
 
 selections_con <- c(
@@ -1006,10 +1201,13 @@ selections_con <- c(
   "common_score",
   "sMAV",
   "sEN",
+  "sAD",
   "common_sMAV",
   "common_sEN",
+  "common_sAD",
   "sMAV_common",
-  "sEN_common"
+  "sEN_common",
+  "sAD_common"
 )
 ```
 
@@ -1021,7 +1219,7 @@ f1_scores <- lapply(all_selections, function(df) {
   y_true_state <- df$DS
   
   # determine if df holds group and condition selections or only condition selections
-  if ("Group1_score" %in% colnames(df)) {
+  if ("tMAV" %in% colnames(df)) {
     # df contains group and condition selections
     selections <- selections_clu_con
   } else {
@@ -1032,7 +1230,7 @@ f1_scores <- lapply(all_selections, function(df) {
   # calculate F1 scores
   f1_scores <- c()
   for (selection in selections) {
-    
+
     if (str_starts(selection, "s")) {
       # state scores: compare to y_true_state
       f1_scores <- c(
@@ -1189,6 +1387,68 @@ combined_plot <- wrap_plots(f1_plots, ncol = 2, guides = "collect") +
 
 # save and show combined plot
 ggsave("sel_f1_full.png", combined_plot, path = "../../outs/sim/",
+       width = 12, height = 5, dpi = 300)
+combined_plot
+```
+
+```{r}
+p5 <- bind_cols(
+  f1_scores$patches_clu_con_full,
+  f1_scores$patches_clu_con_hvg %>% select(-Selection)
+) %>% 
+  rename(Full = F1...2, HVG = F1...3) %>% 
+  pivot_longer(cols = HVG, names_to = "Data", values_to = "F1") %>% 
+  ggplot(aes(x = reorder(Selection, F1), y = F1, fill = I("steelblue"))) +
+    geom_col() +
+    coord_flip() +
+    theme_minimal() +
+    labs(x = "", y = "F1", title = "Groups & Conditions")
+
+p5
+```
+
+```{r}
+p6 <- bind_cols(
+  f1_scores$patches_con_full,
+  f1_scores$patches_con_hvg %>% select(-Selection)
+) %>% 
+  rename(Full = F1...2, HVG = F1...3) %>% 
+  pivot_longer(cols = HVG, names_to = "Data", values_to = "F1") %>% 
+  ggplot(aes(x = reorder(Selection, F1), y = F1, fill = I("steelblue"))) +
+    geom_col() +
+    coord_flip() +
+    theme_minimal() +
+    labs(x = "", y = "F1", title = "Conditions")
+
+p6
+```
+
+```{r}
+# combine individual plots
+f1_plots <- list(p5, p6)
+
+f1_plots <- lapply(f1_plots, function(p) {
+  p + theme(
+    text = element_text(size = 16),
+    plot.title = element_text(size = 18)
+  )
+})
+
+combined_plot <- wrap_plots(f1_plots, ncol = 2, guides = "collect") +
+  plot_annotation(
+    title = "F1 Score per Selection",
+    theme = theme(
+      plot.title = element_text(
+        hjust = 0.5,
+        margin = margin(b = 30),
+        size = 20,
+        face = "bold"
+      )
+    )
+  )
+
+# save and show combined plot
+ggsave("sel_f1_hvg.png", combined_plot, path = "../../outs/sim/",
        width = 12, height = 5, dpi = 300)
 combined_plot
 ```
@@ -1457,12 +1717,16 @@ selections_clu_con <- c(
   "common_score",
   "tMAV",
   "tEN",
+  "tMAD",
   "tMAV_sMAV",
   "tEN_sEN",
+  "tMAD_sAD",
   "sMAV",
   "sEN",
+  "sAD",
   "sMAV_tMAV",
   "sEN_tEN",
+  "sAD_tMAD",
   "all_genes"
 )
 
@@ -1470,10 +1734,13 @@ selections_con <- c(
   "common_score",
   "sMAV",
   "sEN",
+  "sAD",
   "common_sMAV",
   "common_sEN",
+  "common_sAD",
   "sMAV_common",
-  "sEN_common"
+  "sEN_common",
+  "sAD_common"
 )
 ```
 
@@ -1481,7 +1748,7 @@ selections_con <- c(
 umap_plots <- lapply(all_selections, function(df) {
   
   # determine if df holds group and condition selections or only condition selections
-  if ("Group1_score" %in% colnames(df)) {
+  if ("tMAV" %in% colnames(df)) {
     # df contains group and condition selections
     selections <- selections_clu_con
   } else {
@@ -1578,13 +1845,22 @@ umap_plots$patches_clu_con_full
 for (i in 1:length(umap_plots$patches_clu_con_full)) {
   file_name <- paste0("umap_", i, ".png")
   
-  ggsave(file_name, umap_plots$patches_clu_con_full[i], path = "../../outs/sim/umap_clu_con/",
+  ggsave(file_name, umap_plots$patches_clu_con_full[i], path = "../../outs/sim/umap_clu_con_full/",
          width = 4, height = 4, dpi = 300)
 }
 ```
 
 ```{r}
 umap_plots$patches_clu_con_hvg
+```
+
+```{r}
+for (i in 1:length(umap_plots$patches_clu_con_hvg)) {
+  file_name <- paste0("umap_", i, ".png")
+  
+  ggsave(file_name, umap_plots$patches_clu_con_hvg[i], path = "../../outs/sim/umap_clu_con_hvg/",
+         width = 4, height = 4, dpi = 300)
+}
 ```
 
 ```{r}
@@ -1595,13 +1871,22 @@ umap_plots$patches_con_full
 for (i in 1:length(umap_plots$patches_con_full)) {
   file_name <- paste0("umap_", i, ".png")
   
-  ggsave(file_name, umap_plots$patches_con_full[i], path = "../../outs/sim/umap_con/",
+  ggsave(file_name, umap_plots$patches_con_full[i], path = "../../outs/sim/umap_con_full/",
          width = 4, height = 4, dpi = 300)
 }
 ```
 
 ```{r}
 umap_plots$patches_con_hvg
+```
+
+```{r}
+for (i in 1:length(umap_plots$patches_con_hvg)) {
+  file_name <- paste0("umap_", i, ".png")
+  
+  ggsave(file_name, umap_plots$patches_con_hvg[i], path = "../../outs/sim/umap_con_hvg/",
+         width = 4, height = 4, dpi = 300)
+}
 ```
 
 
