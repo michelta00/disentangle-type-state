@@ -1468,216 +1468,6 @@ hvgs <- fss_selections$fss_hvg$gene_id
 sce_hvg <- sce_full[rownames(sce_full) %in% hvgs, ]
 ```
 
-### Perform Clustering Based on Selections
-
-```{r}
-# define selections to be used for clustering
-selections_clu_con <- c(
-  "random",
-  "HVG",
-  "tF",
-  "tF_sPVE",
-  "tF_sPBDS",
-  "tPVE_sPVE",
-  "common_score",
-  "tMAV",
-  "tEN",
-  "tMAV_sMAV",
-  "tEN_sEN",
-  "all_genes"
-)
-
-selections_con <- c(
-  "random",
-  "HVG",
-  "tF",
-  "tF_sPVE",
-  "tF_sPBDS",
-  "tPVE_sPVE",
-  "common_score",
-  "all_genes",
-  "common_sMAV",
-  "common_sEN"
-)
-```
-
-```{r}
-ari_scores <- lapply(all_selections, function(df) {
-  
-  # determine if df holds group and condition selections or only condition selections
-  if ("Group1_score" %in% colnames(df)) {
-    # df contains group and condition selections
-    selections <- selections_clu_con
-  } else {
-    # df contains only condition selections
-    selections <- selections_con
-  }
-  
-  # determine if df contains full or HVG data
-  if (dim(df)[1] == dim(sce_full)[1]) {
-    # df contains full data
-    sce_iter <- sce_full
-  } else {
-    # df contains HVG data
-    sce_iter <- sce_hvg
-  }
-  
-  # calculate ARI scores
-  ari_scores <- c()
-  for (selection in selections) {
-    
-    # set seed
-    set.seed(42)
-    
-    # dimensionality reduction and clustering
-    sce_iter <- runPCA(sce_iter, subset_row=df[[selection]])
-    g <- buildSNNGraph(sce_iter, use.dimred="PCA", type="jaccard")
-    k <- cluster_louvain(g, resolution=1)$membership
-    new_col <- paste0("cluster_re_", selection)
-    sce_iter[[new_col]] <- factor(k, seq_along(unique(k)))
-    
-    # ARI score calculation
-    ari_scores <- c(
-      ari_scores,
-      ARI(sce_iter$cluster_id, sce_iter[[new_col]])
-    )
-    
-  }
-  
-  results <- data.frame(Selection = selections, ARI = ari_scores)
-  results$Selection <- factor(results$Selection, levels = results$Selection)
-  
-  return(results)
-  
-})
-```
-
-```{r}
-p1 <- bind_cols(
-  ari_scores$patches_clu_con_full,
-  ari_scores$patches_clu_con_hvg %>% select(-Selection)
-) %>% 
-  rename(Full = ARI...2, HVG = ARI...3) %>% 
-  pivot_longer(cols = c(Full, HVG), names_to = "Data", values_to = "ARI") %>% 
-  ggplot(aes(x = reorder(Selection, ARI), y = ARI, fill = Data)) +
-    geom_col(position = position_dodge(width = 0.8)) +
-    coord_flip() +
-    scale_fill_manual(values = c("steelblue", "darkgrey")) +
-    theme_minimal() +
-    labs(x = "", y = "ARI", title = "Groups & Conditions")
-
-p1
-```
-
-```{r}
-p2 <- bind_cols(
-  ari_scores$patches_con_full,
-  ari_scores$patches_con_hvg %>% select(-Selection)
-) %>% 
-  rename(Full = ARI...2, HVG = ARI...3) %>% 
-  pivot_longer(cols = c(Full, HVG), names_to = "Data", values_to = "ARI") %>% 
-  ggplot(aes(x = reorder(Selection, ARI), y = ARI, fill = Data)) +
-    geom_col(position = position_dodge(width = 0.8)) +
-    coord_flip() +
-    scale_fill_manual(values = c("steelblue", "darkgrey")) +
-    theme_minimal() +
-    labs(x = "", y = "ARI", title = "Conditions")
-
-p2
-```
-
-```{r}
-# combine individual plots
-ari_plots <- list(p1, p2)
-
-ari_plots <- lapply(ari_plots, function(p) {
-  p + theme(
-    text = element_text(size = 16),
-    plot.title = element_text(size = 18)
-  )
-})
-
-combined_plot <- wrap_plots(ari_plots, ncol = 2, guides = "collect") +
-  plot_annotation(
-    title = "ARI Score per Selection",
-    theme = theme(
-      plot.title = element_text(
-        hjust = 0.5,
-        margin = margin(b = 30),
-        size = 20,
-        face = "bold"
-      )
-    )
-  )
-
-# save and show combined plot
-ggsave("sel_ari.png", combined_plot, path = "../../outs/sim/",
-       width = 12, height = 5, dpi = 300)
-combined_plot
-```
-
-```{r}
-p3 <- bind_cols(
-  ari_scores$patches_clu_con_full,
-  ari_scores$patches_clu_con_hvg %>% select(-Selection)
-) %>% 
-  rename(Full = ARI...2, HVG = ARI...3) %>% 
-  pivot_longer(cols = Full, names_to = "Data", values_to = "ARI") %>% 
-  ggplot(aes(x = reorder(Selection, ARI), y = ARI, fill = I("steelblue"))) +
-    geom_col() +
-    coord_flip() +
-    theme_minimal() +
-    labs(x = "", y = "ARI", title = "Groups & Conditions")
-
-p3
-```
-
-```{r}
-p4 <- bind_cols(
-  ari_scores$patches_con_full,
-  ari_scores$patches_con_hvg %>% select(-Selection)
-) %>% 
-  rename(Full = ARI...2, HVG = ARI...3) %>% 
-  pivot_longer(cols = Full, names_to = "Data", values_to = "ARI") %>% 
-  ggplot(aes(x = reorder(Selection, ARI), y = ARI, fill = I("steelblue"))) +
-    geom_col() +
-    coord_flip() +
-    theme_minimal() +
-    labs(x = "", y = "ARI", title = "Conditions")
-
-p4
-```
-
-```{r}
-# combine individual plots
-ari_plots <- list(p3, p4)
-
-ari_plots <- lapply(ari_plots, function(p) {
-  p + theme(
-    text = element_text(size = 16),
-    plot.title = element_text(size = 18)
-  )
-})
-
-combined_plot <- wrap_plots(ari_plots, ncol = 2, guides = "collect") +
-  plot_annotation(
-    title = "ARI Score per Selection",
-    theme = theme(
-      plot.title = element_text(
-        hjust = 0.5,
-        margin = margin(b = 30),
-        size = 20,
-        face = "bold"
-      )
-    )
-  )
-
-# save and show combined plot
-ggsave("sel_ari_full.png", combined_plot, path = "../../outs/sim/",
-       width = 12, height = 5, dpi = 300)
-combined_plot
-```
-
 ### UMAPs
 
 ```{r}
@@ -1889,8 +1679,282 @@ for (i in 1:length(umap_plots$patches_con_hvg)) {
 }
 ```
 
+### Perform Clustering Based on Selections
 
+```{r}
+# define selections to be used for clustering
+selections_clu_con <- c(
+  "random",
+  "HVG",
+  "tF",
+  "tF_sPVE",
+  "tF_sPBDS",
+  "tPVE_sPVE",
+  "common_score",
+  "tMAV",
+  "tEN",
+  "tMAD",
+  "tMAV_sMAV",
+  "tEN_sEN",
+  "tMAD_sAD",
+  "all_genes"
+)
 
+selections_con <- c(
+  "random",
+  "HVG",
+  "tF",
+  "tF_sPVE",
+  "tF_sPBDS",
+  "tPVE_sPVE",
+  "common_score",
+  "common_sMAV",
+  "common_sEN",
+  "common_sAD",
+  "all_genes"
+)
+```
+
+```{r}
+ari_scores <- lapply(all_selections, function(df) {
+  
+  # determine if df holds group and condition selections or only condition selections
+  if ("tMAV" %in% colnames(df)) {
+    # df contains group and condition selections
+    selections <- selections_clu_con
+  } else {
+    # df contains only condition selections
+    selections <- selections_con
+  }
+  
+  # determine if df contains full or HVG data
+  if (dim(df)[1] == dim(sce_full)[1]) {
+    # df contains full data
+    sce_iter <- sce_full
+  } else {
+    # df contains HVG data
+    sce_iter <- sce_hvg
+  }
+  
+  # calculate ARI scores
+  ari_scores <- c()
+  for (selection in selections) {
+    
+    # set seed
+    set.seed(42)
+    
+    # dimensionality reduction and clustering
+    sce_iter <- runPCA(sce_iter, subset_row=df[[selection]])
+    g <- buildSNNGraph(sce_iter, use.dimred="PCA", type="jaccard")
+    k <- cluster_louvain(g, resolution=1)$membership
+    n_clusters <- length(unique(k))
+    message(selection, ": ", n_clusters, " clusters")
+    new_col <- paste0("cluster_re_", selection)
+    sce_iter[[new_col]] <- factor(k, seq_along(unique(k)))
+    
+    # ARI score calculation
+    ari_scores <- c(
+      ari_scores,
+      ARI(sce_iter$cluster_id, sce_iter[[new_col]])
+    )
+    
+  }
+  
+  results <- data.frame(Selection = selections, ARI = ari_scores)
+  results$Selection <- factor(results$Selection, levels = results$Selection)
+  
+  return(results)
+  
+})
+```
+
+```{r}
+p1 <- bind_cols(
+  ari_scores$patches_clu_con_full,
+  ari_scores$patches_clu_con_hvg %>% select(-Selection)
+) %>% 
+  rename(Full = ARI...2, HVG = ARI...3) %>% 
+  pivot_longer(cols = c(Full, HVG), names_to = "Data", values_to = "ARI") %>% 
+  ggplot(aes(x = reorder(Selection, ARI), y = ARI, fill = Data)) +
+    geom_col(position = position_dodge(width = 0.8)) +
+    coord_flip() +
+    scale_fill_manual(values = c("steelblue", "darkgrey")) +
+    theme_minimal() +
+    labs(x = "", y = "ARI", title = "Groups & Conditions")
+
+p1
+```
+
+```{r}
+p2 <- bind_cols(
+  ari_scores$patches_con_full,
+  ari_scores$patches_con_hvg %>% select(-Selection)
+) %>% 
+  rename(Full = ARI...2, HVG = ARI...3) %>% 
+  pivot_longer(cols = c(Full, HVG), names_to = "Data", values_to = "ARI") %>% 
+  ggplot(aes(x = reorder(Selection, ARI), y = ARI, fill = Data)) +
+    geom_col(position = position_dodge(width = 0.8)) +
+    coord_flip() +
+    scale_fill_manual(values = c("steelblue", "darkgrey")) +
+    theme_minimal() +
+    labs(x = "", y = "ARI", title = "Conditions")
+
+p2
+```
+
+```{r}
+# combine individual plots
+ari_plots <- list(p1, p2)
+
+ari_plots <- lapply(ari_plots, function(p) {
+  p + theme(
+    text = element_text(size = 16),
+    plot.title = element_text(size = 18)
+  )
+})
+
+combined_plot <- wrap_plots(ari_plots, ncol = 2, guides = "collect") +
+  plot_annotation(
+    title = "ARI Score per Selection",
+    theme = theme(
+      plot.title = element_text(
+        hjust = 0.5,
+        margin = margin(b = 30),
+        size = 20,
+        face = "bold"
+      )
+    )
+  )
+
+# save and show combined plot
+ggsave("sel_ari.png", combined_plot, path = "../../outs/sim/",
+       width = 12, height = 5, dpi = 300)
+combined_plot
+```
+
+```{r}
+p3 <- bind_cols(
+  ari_scores$patches_clu_con_full,
+  ari_scores$patches_clu_con_hvg %>% select(-Selection)
+) %>% 
+  rename(Full = ARI...2, HVG = ARI...3) %>% 
+  pivot_longer(cols = Full, names_to = "Data", values_to = "ARI") %>% 
+  ggplot(aes(x = reorder(Selection, ARI), y = ARI, fill = I("steelblue"))) +
+    geom_col() +
+    coord_flip() +
+    theme_minimal() +
+    labs(x = "", y = "ARI", title = "Groups & Conditions")
+
+p3
+```
+
+```{r}
+p4 <- bind_cols(
+  ari_scores$patches_con_full,
+  ari_scores$patches_con_hvg %>% select(-Selection)
+) %>% 
+  rename(Full = ARI...2, HVG = ARI...3) %>% 
+  pivot_longer(cols = Full, names_to = "Data", values_to = "ARI") %>% 
+  ggplot(aes(x = reorder(Selection, ARI), y = ARI, fill = I("steelblue"))) +
+    geom_col() +
+    coord_flip() +
+    theme_minimal() +
+    labs(x = "", y = "ARI", title = "Conditions")
+
+p4
+```
+
+```{r}
+# combine individual plots
+ari_plots <- list(p3, p4)
+
+ari_plots <- lapply(ari_plots, function(p) {
+  p + theme(
+    text = element_text(size = 16),
+    plot.title = element_text(size = 18)
+  )
+})
+
+combined_plot <- wrap_plots(ari_plots, ncol = 2, guides = "collect") +
+  plot_annotation(
+    title = "ARI Score per Selection",
+    theme = theme(
+      plot.title = element_text(
+        hjust = 0.5,
+        margin = margin(b = 30),
+        size = 20,
+        face = "bold"
+      )
+    )
+  )
+
+# save and show combined plot
+ggsave("sel_ari_full.png", combined_plot, path = "../../outs/sim/",
+       width = 12, height = 5, dpi = 300)
+combined_plot
+```
+
+```{r}
+p5 <- bind_cols(
+  ari_scores$patches_clu_con_full,
+  ari_scores$patches_clu_con_hvg %>% select(-Selection)
+) %>% 
+  rename(Full = ARI...2, HVG = ARI...3) %>% 
+  pivot_longer(cols = HVG, names_to = "Data", values_to = "ARI") %>% 
+  ggplot(aes(x = reorder(Selection, ARI), y = ARI, fill = I("steelblue"))) +
+    geom_col() +
+    coord_flip() +
+    theme_minimal() +
+    labs(x = "", y = "ARI", title = "Groups & Conditions")
+
+p5
+```
+
+```{r}
+p6 <- bind_cols(
+  ari_scores$patches_con_full,
+  ari_scores$patches_con_hvg %>% select(-Selection)
+) %>% 
+  rename(Full = ARI...2, HVG = ARI...3) %>% 
+  pivot_longer(cols = HVG, names_to = "Data", values_to = "ARI") %>% 
+  ggplot(aes(x = reorder(Selection, ARI), y = ARI, fill = I("steelblue"))) +
+    geom_col() +
+    coord_flip() +
+    theme_minimal() +
+    labs(x = "", y = "ARI", title = "Conditions")
+
+p6
+```
+
+```{r}
+# combine individual plots
+ari_plots <- list(p5, p6)
+
+ari_plots <- lapply(ari_plots, function(p) {
+  p + theme(
+    text = element_text(size = 16),
+    plot.title = element_text(size = 18)
+  )
+})
+
+combined_plot <- wrap_plots(ari_plots, ncol = 2, guides = "collect") +
+  plot_annotation(
+    title = "ARI Score per Selection",
+    theme = theme(
+      plot.title = element_text(
+        hjust = 0.5,
+        margin = margin(b = 30),
+        size = 20,
+        face = "bold"
+      )
+    )
+  )
+
+# save and show combined plot
+ggsave("sel_ari_hvg.png", combined_plot, path = "../../outs/sim/",
+       width = 12, height = 5, dpi = 300)
+combined_plot
+```
 
 
 

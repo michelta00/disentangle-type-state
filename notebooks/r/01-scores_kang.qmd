@@ -838,135 +838,6 @@ combined_plot
 sce <- readRDS("../../data/kang/01-pro/Kang18.rds")
 ```
 
-### Perform Clustering Based on Selections
-
-```{r}
-# define selections to be used for clustering
-selections_clu_con <- c(
-  "random",
-  "HVG",
-  "tF",
-  "tF_sPVE",
-  "tF_sPBDS",
-  "tPVE_sPVE",
-  "common_score",
-  "tMAV",
-  "tEN",
-  "tMAV_sMAV",
-  "tEN_sEN",
-  "all_genes"
-)
-
-selections_con <- c(
-  "random",
-  "HVG",
-  "tF",
-  "tF_sPVE",
-  "tF_sPBDS",
-  "tPVE_sPVE",
-  "common_score",
-  "all_genes",
-  "common_sMAV",
-  "common_sEN"
-)
-```
-
-```{r}
-ari_scores <- lapply(all_selections, function(df) {
-  
-  # determine if df holds group and condition selections or only condition selections
-  if ("B_cells_score" %in% colnames(df)) {
-    # df contains group and condition selections
-    selections <- selections_clu_con
-  } else {
-    # df contains only condition selections
-    selections <- selections_con
-  }
-  
-  sce_iter <- sce
-  
-  # calculate ARI scores
-  ari_scores <- c()
-  for (selection in selections) {
-    
-    # set seed
-    set.seed(42)
-    
-    # dimensionality reduction and clustering
-    sce_iter <- runPCA(sce_iter, subset_row=df[[selection]])
-    g <- buildSNNGraph(sce_iter, use.dimred="PCA", type="jaccard")
-    k <- cluster_louvain(g, resolution=1)$membership
-    new_col <- paste0("cluster_re_", selection)
-    sce_iter[[new_col]] <- factor(k, seq_along(unique(k)))
-    
-    # ARI score calculation
-    ari_scores <- c(
-      ari_scores,
-      ARI(sce_iter$cluster_id, sce_iter[[new_col]])
-    )
-    
-  }
-  
-  results <- data.frame(Selection = selections, ARI = ari_scores)
-  results$Selection <- factor(results$Selection, levels = results$Selection)
-  
-  return(results)
-  
-})
-```
-
-```{r}
-p1 <- ari_scores$Kang18_clu_con %>% 
-  ggplot(aes(x = reorder(Selection, ARI), y = ARI)) +
-    geom_col(fill = "steelblue") +
-    coord_flip() +
-    theme_minimal() +
-    labs(x = "", y = "ARI", title = "Cell Types & Conditions")
-
-p1
-```
-
-```{r}
-p2 <- ari_scores$Kang18_con %>% 
-  ggplot(aes(x = reorder(Selection, ARI), y = ARI)) +
-    geom_col(fill = "steelblue") +
-    coord_flip() +
-    theme_minimal() +
-    labs(x = "", y = "ARI", title = "Conditions")
-
-p2
-```
-
-```{r}
-# combine individual plots
-ari_plots <- list(p1, p2)
-
-ari_plots <- lapply(ari_plots, function(p) {
-  p + theme(
-    text = element_text(size = 16),
-    plot.title = element_text(size = 18)
-  )
-})
-
-combined_plot <- wrap_plots(ari_plots, ncol = 2, guides = "collect") +
-  plot_annotation(
-    title = "ARI Score per Selection",
-    theme = theme(
-      plot.title = element_text(
-        hjust = 0.5,
-        margin = margin(b = 30),
-        size = 20,
-        face = "bold"
-      )
-    )
-  )
-
-# save and show combined plot
-ggsave("sel_ari.png", combined_plot, path = "../../outs/kang/",
-       width = 12, height = 5, dpi = 300)
-combined_plot
-```
-
 ### UMAPs
 
 ```{r}
@@ -1195,6 +1066,147 @@ for (i in 1:length(umap_tsne_plots$Kang18_con)) {
          width = 4, height = 4, dpi = 300)
 }
 ```
+
+### Perform Clustering Based on Selections
+
+```{r}
+# define selections to be used for clustering
+selections_clu_con <- c(
+  "random",
+  "HVG",
+  "tF",
+  "tF_sPVE",
+  "tF_sPBDS",
+  "tPVE_sPVE",
+  "common_score",
+  "tMAV",
+  "tEN",
+  "tMAD",
+  "tMAV_sMAV",
+  "tEN_sEN",
+  "tMAD_sAD",
+  "all_genes"
+)
+
+selections_con <- c(
+  "random",
+  "HVG",
+  "tF",
+  "tF_sPVE",
+  "tF_sPBDS",
+  "tPVE_sPVE",
+  "common_score",
+  "common_sMAV",
+  "common_sEN",
+  "common_sAD",
+  "all_genes"
+)
+```
+
+```{r}
+ari_scores <- lapply(all_selections, function(df) {
+  
+  # determine if df holds group and condition selections or only condition selections
+  if ("tMAV" %in% colnames(df)) {
+    # df contains group and condition selections
+    selections <- selections_clu_con
+  } else {
+    # df contains only condition selections
+    selections <- selections_con
+  }
+  
+  sce_iter <- sce
+  
+  # calculate ARI scores
+  ari_scores <- c()
+  for (selection in selections) {
+    
+    # set seed
+    set.seed(42)
+    
+    # dimensionality reduction and clustering
+    sce_iter <- runPCA(sce_iter, subset_row=df[[selection]])
+    g <- buildSNNGraph(sce_iter, use.dimred="PCA", type="jaccard")
+    k <- cluster_louvain(g, resolution=0.4)$membership
+    n_clusters <- length(unique(k))
+    message(selection, ": ", n_clusters, " clusters")
+    new_col <- paste0("cluster_re_", selection)
+    sce_iter[[new_col]] <- factor(k, seq_along(unique(k)))
+    
+    # ARI score calculation
+    ari_scores <- c(
+      ari_scores,
+      ARI(sce_iter$cluster_id, sce_iter[[new_col]])
+    )
+    
+  }
+  
+  results <- data.frame(Selection = selections, ARI = ari_scores)
+  results$Selection <- factor(results$Selection, levels = results$Selection)
+  
+  return(results)
+  
+})
+```
+
+```{r}
+p1 <- ari_scores$Kang18_clu_con %>% 
+  ggplot(aes(x = reorder(Selection, ARI), y = ARI)) +
+    geom_col(fill = "steelblue") +
+    coord_flip() +
+    theme_minimal() +
+    labs(x = "", y = "ARI", title = "Cell Types & Conditions")
+
+p1
+```
+
+```{r}
+p2 <- ari_scores$Kang18_con %>% 
+  ggplot(aes(x = reorder(Selection, ARI), y = ARI)) +
+    geom_col(fill = "steelblue") +
+    coord_flip() +
+    theme_minimal() +
+    labs(x = "", y = "ARI", title = "Conditions")
+
+p2
+```
+
+```{r}
+# combine individual plots
+ari_plots <- list(p1, p2)
+
+ari_plots <- lapply(ari_plots, function(p) {
+  p + theme(
+    text = element_text(size = 16),
+    plot.title = element_text(size = 18)
+  )
+})
+
+combined_plot <- wrap_plots(ari_plots, ncol = 2, guides = "collect") +
+  plot_annotation(
+    title = "ARI Score per Selection",
+    theme = theme(
+      plot.title = element_text(
+        hjust = 0.5,
+        margin = margin(b = 30),
+        size = 20,
+        face = "bold"
+      )
+    )
+  )
+
+# save and show combined plot
+ggsave("sel_ari.png", combined_plot, path = "../../outs/kang/",
+       width = 12, height = 5, dpi = 300)
+combined_plot
+```
+
+
+
+
+
+
+
 
 
 
