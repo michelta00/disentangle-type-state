@@ -566,12 +566,69 @@ fss_selections <- load_process_fss_selections(rds_files)
 head(fss_selections)
 ```
 
-### Compute Patches Selections
-
 ```{r}
 # number of genes to select
 n <- sum(fss_selections$tF)
 ```
+
+```{r}
+# add new FSS selections
+expand_fss_selections <- function(df) {
+  
+  # get FSS scores
+  score_df <- fss_scores
+  
+  # tF and sPBDS
+  score_names <- c("tF", "sPBDS")
+  if (all(score_names %in% colnames(score_df))) {
+    
+    t <- rank(score_df[[score_names[1]]])
+    s <- rank(score_df[[score_names[2]]])
+    
+    # state not type
+    scores <- s - t
+    cutoff <- sort(scores, decreasing = TRUE)[n]
+    df$sPBDS_tF <- scores >= cutoff
+    
+  }
+  
+  # tF and sPVE
+  score_names <- c("tF", "sPVE")
+  if (all(score_names %in% colnames(score_df))) {
+    
+    t <- rank(score_df[[score_names[1]]])
+    s <- rank(score_df[[score_names[2]]])
+    
+    # state not type
+    scores <- s - t
+    cutoff <- sort(scores, decreasing = TRUE)[n]
+    df$sPVE_tF <- scores >= cutoff
+    
+  }
+  
+  # tPVE and sPVE
+  score_names <- c("tPVE", "sPVE")
+  if (all(score_names %in% colnames(score_df))) {
+    
+    t <- rank(score_df[[score_names[1]]])
+    s <- rank(score_df[[score_names[2]]])
+    
+    # state not type
+    scores <- s - t
+    cutoff <- sort(scores, decreasing = TRUE)[n]
+    df$sPVE_tPVE <- scores >= cutoff
+    
+  }
+  
+  return(df)
+  
+}
+
+fss_selections <- expand_fss_selections(fss_selections)
+head(fss_selections_expanded)
+```
+
+### Compute Patches Selections
 
 ```{r}
 patches_selections <- lapply(patches_scores, function(score_df) {
@@ -750,7 +807,17 @@ lapply(all_selections, head)
 plot_overlaps <- function(df, title) {
   
   # FSS selections
-  fss_cols <- c("random", "HVG", "tF_sPBDS", "tF_sPVE", "tF", "tPVE_sPVE")
+  fss_cols <- c(
+    "random",
+    "HVG",
+    "tF",
+    "tF_sPBDS",
+    "tF_sPVE",
+    "tPVE_sPVE",
+    "sPBDS_tF",
+    "sPVE_tF",
+    "sPVE_tPVE"
+  )
   
   # Patches selections
   patches_cols <- setdiff(colnames(df), c(fss_cols, "all_genes"))
@@ -824,7 +891,7 @@ combined_plot <- wrap_plots(overlap_plots, ncol = 1, guides = "collect") +
 
 # save and show combined plot
 ggsave("sel_overlap.png", combined_plot, path = "../../outs/kang/",
-       width = 8, height = 8, dpi = 300)
+       width = 8, height = 9, dpi = 300)
 combined_plot
 ```
 
@@ -874,6 +941,9 @@ selections_clu_con <- c(
   "tF_sPVE",
   "tF_sPBDS",
   "tPVE_sPVE",
+  "sPBDS_tF",
+  "sPVE_tF",
+  "sPVE_tPVE",
   "common_score",
   "tMAV",
   "tEN",

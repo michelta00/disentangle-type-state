@@ -757,8 +757,6 @@ fss_selections <- load_process_fss_selections(rds_files, hvgs)
 lapply(fss_selections, head)
 ```
 
-### Compute Patches Selections
-
 ```{r}
 # get number of genes to select from ground truth (match the number of ground
 # truth type (DEnotDS) and state (DS) genes for full and HVG data)
@@ -771,6 +769,72 @@ ns_hvg <- sum(fss_selections$fss_hvg$DS)
 nst_full <- sum(fss_selections$fss_full$DSnotDE)
 nst_hvg <- sum(fss_selections$fss_hvg$DSnotDE)
 ```
+
+```{r}
+# add new FSS selections
+fss_selections <- lapply(fss_selections, function(df) {
+  
+  # determine if df contains full or HVG data and adjust n accordingly
+  full <- ifelse(dim(df)[1] > 1500, TRUE, FALSE)
+  nt <- ifelse(full, nt_full, nt_hvg)
+  ns <- ifelse(full, ns_full, ns_hvg)
+  nst <- ifelse(full, nst_full, nst_hvg)
+  
+  # determine if df contains full or HVG data and adjust score df accordingly
+  score_df <- if (full) {
+    fss_scores$fss_full
+  } else {
+    fss_scores$fss_hvg
+  }
+  
+  # tF and sPBDS
+  score_names <- c("tF", "sPBDS")
+  if (all(score_names %in% colnames(score_df))) {
+    
+    t <- rank(score_df[[score_names[1]]])
+    s <- rank(score_df[[score_names[2]]])
+    
+    # state not type
+    scores <- s - t
+    cutoff <- sort(scores, decreasing = TRUE)[ns]
+    df$sPBDS_tF <- scores >= cutoff
+    
+  }
+  
+  # tF and sPVE
+  score_names <- c("tF", "sPVE")
+  if (all(score_names %in% colnames(score_df))) {
+    
+    t <- rank(score_df[[score_names[1]]])
+    s <- rank(score_df[[score_names[2]]])
+    
+    # state not type
+    scores <- s - t
+    cutoff <- sort(scores, decreasing = TRUE)[ns]
+    df$sPVE_tF <- scores >= cutoff
+    
+  }
+  
+  # tPVE and sPVE
+  score_names <- c("tPVE", "sPVE")
+  if (all(score_names %in% colnames(score_df))) {
+    
+    t <- rank(score_df[[score_names[1]]])
+    s <- rank(score_df[[score_names[2]]])
+    
+    # state not type
+    scores <- s - t
+    cutoff <- sort(scores, decreasing = TRUE)[ns]
+    df$sPVE_tPVE <- scores >= cutoff
+    
+  }
+  
+  return(df)
+  
+})
+```
+
+### Compute Patches Selections
 
 ```{r}
 patches_selections <- lapply(patches_scores, function(score_df) {
@@ -1176,6 +1240,9 @@ selections_clu_con <- c(
   "tF_sPVE",
   "tF_sPBDS",
   "tPVE_sPVE",
+  "sPVE_tF",
+  "sPBDS_tF",
+  "sPVE_tPVE",
   "common_score",
   "sMAV",
   "sEN",
@@ -1198,6 +1265,9 @@ selections_con <- c(
   "tF_sPVE",
   "tF_sPBDS",
   "tPVE_sPVE",
+  "sPVE_tF",
+  "sPBDS_tF",
+  "sPVE_tPVE",
   "common_score",
   "sMAV",
   "sEN",
@@ -1449,7 +1519,7 @@ combined_plot <- wrap_plots(f1_plots, ncol = 2, guides = "collect") +
 
 # save and show combined plot
 ggsave("sel_f1_hvg.png", combined_plot, path = "../../outs/sim/",
-       width = 12, height = 5, dpi = 300)
+       width = 12, height = 6, dpi = 300)
 combined_plot
 ```
 
@@ -1504,6 +1574,9 @@ selections_clu_con <- c(
   "tF_sPVE",
   "tF_sPBDS",
   "tPVE_sPVE",
+  "sPVE_tF",
+  "sPBDS_tF",
+  "sPVE_tPVE",
   "common_score",
   "tMAV",
   "tEN",
