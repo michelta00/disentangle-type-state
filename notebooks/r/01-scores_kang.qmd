@@ -625,7 +625,7 @@ expand_fss_selections <- function(df) {
 }
 
 fss_selections <- expand_fss_selections(fss_selections)
-head(fss_selections_expanded)
+head(fss_selections)
 ```
 
 ### Compute Patches Selections
