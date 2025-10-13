@@ -25,6 +25,7 @@ suppressPackageStartupMessages({
   library(scater)
   library(igraph)
   library(SingleCellExperiment)
+  library(zellkonverter)
   library(MLVSBM)
   library(tidyverse)
   library(viridis)
@@ -893,6 +894,34 @@ combined_plot <- wrap_plots(overlap_plots, ncol = 1, guides = "collect") +
 ggsave("sel_overlap.png", combined_plot, path = "../../outs/kang/",
        width = 8, height = 9, dpi = 300)
 combined_plot
+```
+
+### Export Selections
+
+```{r}
+# read in sce file
+sce <- readRDS("../../data/kang/01-pro/Kang18.rds")
+
+# function for adding selection to sce objects
+add_selection_data <- function(sce, selections_list, name) {
+  
+  selection <- selections_list[[name]]
+  if (!all(rownames(sce) == selection$gene_id)) {
+    stop("Gene IDs do not match between SCE and selection table")
+  }
+  
+  rowData(sce) <- cbind(rowData(sce), selection[ , -1])
+  return(sce)
+  
+}
+
+# add selections to sce objects
+sce_clu_con <- add_selection_data(sce, all_selections, "Kang18_clu_con")
+sce_con     <- add_selection_data(sce, all_selections, "Kang18_con")
+
+# export sce to anndata
+writeH5AD(sce_clu_con, "../../data/kang/03-selections/Kang18-selections_clu_con.h5ad")
+writeH5AD(sce_con, "../../data/kang/03-selections/Kang18-selections_con.h5ad")
 ```
 
 

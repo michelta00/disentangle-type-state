@@ -25,6 +25,7 @@ suppressPackageStartupMessages({
   library(scater)
   library(igraph)
   library(SingleCellExperiment)
+  library(zellkonverter)
   library(MLVSBM)
   library(tidyverse)
   library(viridis)
@@ -1521,6 +1522,42 @@ combined_plot <- wrap_plots(f1_plots, ncol = 2, guides = "collect") +
 ggsave("sel_f1_hvg.png", combined_plot, path = "../../outs/sim/",
        width = 12, height = 6, dpi = 300)
 combined_plot
+```
+
+### Export Selections
+
+```{r}
+# read in sce file
+sce_full <- readRDS("../../data/sim/01-pro/t100,s80,b0.rds")
+
+# create HVG sce object
+hvgs <- fss_selections$fss_hvg$gene_id
+sce_hvg <- sce_full[rownames(sce_full) %in% hvgs, ]
+
+# function for adding selection to sce objects
+add_selection_data <- function(sce, selections_list, name) {
+  
+  selection <- selections_list[[name]]
+  if (!all(rownames(sce) == selection$gene_id)) {
+    stop("Gene IDs do not match between SCE and selection table")
+  }
+  
+  rowData(sce) <- cbind(rowData(sce), selection[ , -1])
+  return(sce)
+  
+}
+
+# add selections to sce objects
+sce_clu_con_full <- add_selection_data(sce_full, all_selections, "patches_clu_con_full")
+sce_con_full     <- add_selection_data(sce_full, all_selections, "patches_con_full")
+sce_clu_con_hvg  <- add_selection_data(sce_hvg,  all_selections, "patches_clu_con_hvg")
+sce_con_hvg      <- add_selection_data(sce_hvg,  all_selections, "patches_con_hvg")
+
+# export sce to anndata
+writeH5AD(sce_clu_con_full, "../../data/sim/03-selections/t100,s80,b0-selections_clu_con_full.h5ad")
+writeH5AD(sce_con_full, "../../data/sim/03-selections/t100,s80,b0-selections_con_full.h5ad")
+writeH5AD(sce_clu_con_hvg, "../../data/sim/03-selections/t100,s80,b0-selections_clu_con_hvg.h5ad")
+writeH5AD(sce_con_hvg, "../../data/sim/03-selections/t100,s80,b0-selections_con_hvg.h5ad")
 ```
 
 
