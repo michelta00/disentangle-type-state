@@ -1676,7 +1676,79 @@ ggsave("sel_pcr.png", combined_plot, path = "../../outs/kang/",
 combined_plot
 ```
 
+### MI
 
+```{r}
+path <- "../../data/kang/05-mi/"
+```
+
+#### Embeddings
+
+```{r}
+emb <- read_csv(paste0(path, "embedding_mi.csv"), col_types = "cdddd")
+head(emb)
+```
+
+```{r}
+emb_experiments <- emb$experiment
+color_map <- setNames(qualitative_hcl(3, palette = "Dark 3"), emb_experiments)
+```
+
+```{r}
+p1 <- emb %>% 
+  ggplot(aes(x = reorder(experiment, mi_mean), y = mi_mean, fill = experiment)) +
+    geom_col() +
+    coord_flip() +
+    geom_errorbar(aes(ymin = mi_mean - mi_std, ymax = mi_mean + mi_std), width = 0.2) +
+    theme_minimal() +
+    theme(legend.position = "none") +
+    scale_fill_manual(values = color_map) +
+    labs(x = "", y = "MI", title = "Embeddings")
+
+p1
+```
+
+#### Selections
+
+```{r}
+sel <- read_csv(paste0(path, "selection_mi.csv"), col_types = "ccdddd")
+head(sel)
+```
+
+```{r}
+sel_pairs <- unique(sel$selection_pair)
+color_map <- setNames(qualitative_hcl(9, palette = "Dark 3"), sel_pairs)
+```
+
+```{r}
+p2 <- sel %>% 
+  filter(experiment == "sel_clu_con") %>% 
+  ggplot(aes(x = reorder(selection_pair, mi_mean), y = mi_mean, fill = selection_pair)) +
+    geom_col() +
+    coord_flip() +
+    geom_errorbar(aes(ymin = mi_mean - mi_std, ymax = mi_mean + mi_std), width = 0.2) +
+    theme_minimal() +
+    theme(legend.position = "none") +
+    scale_fill_manual(values = color_map) +
+    labs(x = "", y = "MI", title = "Groups & Conditions")
+
+p2
+```
+
+```{r}
+p3 <- sel %>% 
+  filter(experiment == "sel_con") %>% 
+  ggplot(aes(x = reorder(selection_pair, mi_mean), y = mi_mean, fill = selection_pair)) +
+    geom_col() +
+    coord_flip() +
+    geom_errorbar(aes(ymin = mi_mean - mi_std, ymax = mi_mean + mi_std), width = 0.2) +
+    theme_minimal() +
+    theme(legend.position = "none") +
+    scale_fill_manual(values = color_map) +
+    labs(x = "", y = "MI", title = "Conditions")
+
+p3
+```
 
 
 
