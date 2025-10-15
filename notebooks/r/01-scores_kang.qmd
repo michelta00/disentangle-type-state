@@ -31,6 +31,7 @@ suppressPackageStartupMessages({
   library(viridis)
   library(GGally)
   library(rlang)
+  library(colorspace)
 })
 ```
 
@@ -1166,40 +1167,48 @@ for (i in 1:length(umap_tsne_plots$Kang18_con)) {
 }
 ```
 
-### Perform Clustering Based on Selections
+### Perform Clustering Based on Selections (ARI Scores)
 
 ```{r}
 # define selections to be used for clustering
 selections_clu_con <- c(
+  "all_genes",
   "random",
   "HVG",
-  "tF",
   "tF_sPVE",
   "tF_sPBDS",
   "tPVE_sPVE",
-  "common_score",
-  "tMAV",
-  "tEN",
-  "tMAD",
+  "sPVE_tF",
+  "sPBDS_tF",
+  "sPVE_tPVE",
   "tMAV_sMAV",
   "tEN_sEN",
   "tMAD_sAD",
-  "all_genes"
+  "sMAV_tMAV",
+  "sEN_tEN",
+  "sAD_tMAD"
 )
 
 selections_con <- c(
+  "all_genes",
   "random",
   "HVG",
-  "tF",
   "tF_sPVE",
   "tF_sPBDS",
   "tPVE_sPVE",
-  "common_score",
+  "sPVE_tF",
+  "sPBDS_tF",
+  "sPVE_tPVE",
   "common_sMAV",
   "common_sEN",
   "common_sAD",
-  "all_genes"
+  "sMAV_common",
+  "sEN_common",
+  "sAD_common"
 )
+
+all_sels <- unique(c(selections_clu_con, selections_con))
+color_map <- setNames(qualitative_hcl(21, palette = "Dark 3"), all_sels)
 ```
 
 ```{r}
@@ -1226,7 +1235,7 @@ ari_scores <- lapply(all_selections, function(df) {
     # dimensionality reduction and clustering
     sce_iter <- runPCA(sce_iter, subset_row=df[[selection]])
     g <- buildSNNGraph(sce_iter, use.dimred="PCA", type="jaccard")
-    k <- cluster_louvain(g, resolution=0.4)$membership
+    k <- cluster_louvain(g, resolution=0.3)$membership
     n_clusters <- length(unique(k))
     message(selection, ": ", n_clusters, " clusters")
     new_col <- paste0("cluster_re_", selection)
@@ -1250,10 +1259,12 @@ ari_scores <- lapply(all_selections, function(df) {
 
 ```{r}
 p1 <- ari_scores$Kang18_clu_con %>% 
-  ggplot(aes(x = reorder(Selection, ARI), y = ARI)) +
-    geom_col(fill = "steelblue") +
+  ggplot(aes(x = reorder(Selection, ARI), y = ARI, fill = Selection)) +
+    geom_col() +
     coord_flip() +
     theme_minimal() +
+    theme(legend.position = "none") +
+    scale_fill_manual(values = color_map) +
     labs(x = "", y = "ARI", title = "Cell Types & Conditions")
 
 p1
@@ -1261,10 +1272,12 @@ p1
 
 ```{r}
 p2 <- ari_scores$Kang18_con %>% 
-  ggplot(aes(x = reorder(Selection, ARI), y = ARI)) +
-    geom_col(fill = "steelblue") +
+  ggplot(aes(x = reorder(Selection, ARI), y = ARI, fill = Selection)) +
+    geom_col() +
     coord_flip() +
     theme_minimal() +
+    theme(legend.position = "none") +
+    scale_fill_manual(values = color_map) +
     labs(x = "", y = "ARI", title = "Conditions")
 
 p2
@@ -1296,7 +1309,7 @@ combined_plot <- wrap_plots(ari_plots, ncol = 2, guides = "collect") +
 
 # save and show combined plot
 ggsave("sel_ari.png", combined_plot, path = "../../outs/kang/",
-       width = 12, height = 5, dpi = 300)
+       width = 12, height = 6, dpi = 300)
 combined_plot
 ```
 

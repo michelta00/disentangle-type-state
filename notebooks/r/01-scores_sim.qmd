@@ -31,6 +31,7 @@ suppressPackageStartupMessages({
   library(viridis)
   library(GGally)
   library(rlang)
+  library(colorspace)
 })
 ```
 
@@ -1789,40 +1790,48 @@ for (i in 1:length(umap_plots$patches_con_hvg)) {
 }
 ```
 
-### Perform Clustering Based on Selections
+### Perform Clustering Based on Selections (ARI Scores)
 
 ```{r}
 # define selections to be used for clustering
 selections_clu_con <- c(
+  "all_genes",
   "random",
   "HVG",
-  "tF",
   "tF_sPVE",
   "tF_sPBDS",
   "tPVE_sPVE",
-  "common_score",
-  "tMAV",
-  "tEN",
-  "tMAD",
+  "sPVE_tF",
+  "sPBDS_tF",
+  "sPVE_tPVE",
   "tMAV_sMAV",
   "tEN_sEN",
   "tMAD_sAD",
-  "all_genes"
+  "sMAV_tMAV",
+  "sEN_tEN",
+  "sAD_tMAD"
 )
 
 selections_con <- c(
+  "all_genes",
   "random",
   "HVG",
-  "tF",
   "tF_sPVE",
   "tF_sPBDS",
   "tPVE_sPVE",
-  "common_score",
+  "sPVE_tF",
+  "sPBDS_tF",
+  "sPVE_tPVE",
   "common_sMAV",
   "common_sEN",
   "common_sAD",
-  "all_genes"
+  "sMAV_common",
+  "sEN_common",
+  "sAD_common"
 )
+
+all_sels <- unique(c(selections_clu_con, selections_con))
+color_map <- setNames(qualitative_hcl(21, palette = "Dark 3"), all_sels)
 ```
 
 ```{r}
@@ -1949,10 +1958,12 @@ p3 <- bind_cols(
 ) %>% 
   rename(Full = ARI...2, HVG = ARI...3) %>% 
   pivot_longer(cols = Full, names_to = "Data", values_to = "ARI") %>% 
-  ggplot(aes(x = reorder(Selection, ARI), y = ARI, fill = I("steelblue"))) +
+  ggplot(aes(x = reorder(Selection, ARI), y = ARI, fill = Selection)) +
     geom_col() +
     coord_flip() +
     theme_minimal() +
+    theme(legend.position = "none") +
+    scale_fill_manual(values = color_map) +
     labs(x = "", y = "ARI", title = "Groups & Conditions")
 
 p3
@@ -1965,10 +1976,12 @@ p4 <- bind_cols(
 ) %>% 
   rename(Full = ARI...2, HVG = ARI...3) %>% 
   pivot_longer(cols = Full, names_to = "Data", values_to = "ARI") %>% 
-  ggplot(aes(x = reorder(Selection, ARI), y = ARI, fill = I("steelblue"))) +
+  ggplot(aes(x = reorder(Selection, ARI), y = ARI, fill = Selection)) +
     geom_col() +
     coord_flip() +
     theme_minimal() +
+    theme(legend.position = "none") +
+    scale_fill_manual(values = color_map) +
     labs(x = "", y = "ARI", title = "Conditions")
 
 p4
@@ -2011,10 +2024,12 @@ p5 <- bind_cols(
 ) %>% 
   rename(Full = ARI...2, HVG = ARI...3) %>% 
   pivot_longer(cols = HVG, names_to = "Data", values_to = "ARI") %>% 
-  ggplot(aes(x = reorder(Selection, ARI), y = ARI, fill = I("steelblue"))) +
+  ggplot(aes(x = reorder(Selection, ARI), y = ARI, fill = Selection)) +
     geom_col() +
     coord_flip() +
     theme_minimal() +
+    theme(legend.position = "none") +
+    scale_fill_manual(values = color_map) +
     labs(x = "", y = "ARI", title = "Groups & Conditions")
 
 p5
@@ -2027,10 +2042,12 @@ p6 <- bind_cols(
 ) %>% 
   rename(Full = ARI...2, HVG = ARI...3) %>% 
   pivot_longer(cols = HVG, names_to = "Data", values_to = "ARI") %>% 
-  ggplot(aes(x = reorder(Selection, ARI), y = ARI, fill = I("steelblue"))) +
+  ggplot(aes(x = reorder(Selection, ARI), y = ARI, fill = Selection)) +
     geom_col() +
     coord_flip() +
     theme_minimal() +
+    theme(legend.position = "none") +
+    scale_fill_manual(values = color_map) +
     labs(x = "", y = "ARI", title = "Conditions")
 
 p6
@@ -2062,9 +2079,19 @@ combined_plot <- wrap_plots(ari_plots, ncol = 2, guides = "collect") +
 
 # save and show combined plot
 ggsave("sel_ari_hvg.png", combined_plot, path = "../../outs/sim/",
-       width = 12, height = 5, dpi = 300)
+       width = 12, height = 6, dpi = 300)
 combined_plot
 ```
+
+### 
+
+
+
+
+
+
+
+
 
 
 
