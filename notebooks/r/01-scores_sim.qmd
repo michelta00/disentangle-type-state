@@ -32,6 +32,7 @@ suppressPackageStartupMessages({
   library(GGally)
   library(rlang)
   library(colorspace)
+  library(lisi)
 })
 ```
 
@@ -1790,7 +1791,7 @@ for (i in 1:length(umap_plots$patches_con_hvg)) {
 }
 ```
 
-### Perform Clustering Based on Selections (ARI Scores)
+### ARI
 
 ```{r}
 # define selections to be used for clustering
@@ -2083,15 +2084,272 @@ ggsave("sel_ari_hvg.png", combined_plot, path = "../../outs/sim/",
 combined_plot
 ```
 
-### 
+### LISI
 
+```{r}
+# define selections to be used for clustering
+selections_clu_con <- c(
+  "all_genes",
+  "random",
+  "HVG",
+  "tF_sPVE",
+  "tF_sPBDS",
+  "tPVE_sPVE",
+  "sPVE_tF",
+  "sPBDS_tF",
+  "sPVE_tPVE",
+  "tMAV_sMAV",
+  "tEN_sEN",
+  "tMAD_sAD",
+  "sMAV_tMAV",
+  "sEN_tEN",
+  "sAD_tMAD"
+)
 
+selections_con <- c(
+  "all_genes",
+  "random",
+  "HVG",
+  "tF_sPVE",
+  "tF_sPBDS",
+  "tPVE_sPVE",
+  "sPVE_tF",
+  "sPBDS_tF",
+  "sPVE_tPVE",
+  "common_sMAV",
+  "common_sEN",
+  "common_sAD",
+  "sMAV_common",
+  "sEN_common",
+  "sAD_common"
+)
 
+all_sels <- unique(c(selections_clu_con, selections_con))
+color_map <- setNames(qualitative_hcl(21, palette = "Dark 3"), all_sels)
+```
 
+```{r}
+lisi_scores <- lapply(all_selections, function(df) {
+  
+  # determine if df holds group and condition selections or only condition selections
+  if ("tMAV" %in% colnames(df)) {
+    # df contains group and condition selections
+    selections <- selections_clu_con
+  } else {
+    # df contains only condition selections
+    selections <- selections_con
+  }
+  
+  # determine if df contains full or HVG data
+  if (dim(df)[1] == dim(sce_full)[1]) {
+    # df contains full data
+    sce_iter <- sce_full
+  } else {
+    # df contains HVG data
+    sce_iter <- sce_hvg
+  }
+  
+  # calculate LISI scores
+  lisi_scores <- list()
+  for (selection in selections) {
+    
+    # set seed
+    set.seed(42)
+    
+    # dimensionality reduction and data extraction
+    sce_iter <- runPCA(sce_iter, subset_row=df[[selection]])
+    y <- reducedDim(sce_iter, "PCA")
+    cd <- colData(sce_iter)
+    by <- c(
+      LISI_c="group_id",
+      LISI_g="cluster_id"
+    )
+    
+    # LISI score calculation
+    res <- sapply(by, \(.) {
+        res <- compute_lisi(y, cd, .)
+        n <- length(unique(cd[[.]]))
+        (mean(res[[1]])-1)/(n-1)
+    })
+    
+    lisi_scores[[selection]] <- data.frame(
+      Selection = selection,
+      LISI_g = unname(res["LISI_g"]),
+      LISI_c = unname(res["LISI_c"])
+    )
+    
+  }
+  
+  results <- do.call(rbind, lisi_scores)
+  results$Selection <- factor(results$Selection, levels = results$Selection)
+  return(results)
+  
+})
+```
 
+```{r}
+p1 <- lisi_scores$patches_clu_con_full %>% 
+  ggplot(aes(x = reorder(Selection, LISI_g), y = LISI_g, fill = Selection)) +
+    geom_col() +
+    coord_flip() +
+    theme_minimal() +
+    theme(legend.position = "none") +
+    scale_fill_manual(values = color_map) +
+    labs(x = "", y = "LISI_g", title = "Groups & Conditions (Group Mixing)")
 
+p1
+```
 
+```{r}
+p2 <- lisi_scores$patches_clu_con_full %>% 
+  ggplot(aes(x = reorder(Selection, LISI_c), y = LISI_c, fill = Selection)) +
+    geom_col() +
+    coord_flip() +
+    theme_minimal() +
+    theme(legend.position = "none") +
+    scale_fill_manual(values = color_map) +
+    labs(x = "", y = "LISI_c", title = "Groups & Conditions (Condition Mixing)")
 
+p2
+```
+
+```{r}
+p3 <- lisi_scores$patches_con_full %>% 
+  ggplot(aes(x = reorder(Selection, LISI_g), y = LISI_g, fill = Selection)) +
+    geom_col() +
+    coord_flip() +
+    theme_minimal() +
+    theme(legend.position = "none") +
+    scale_fill_manual(values = color_map) +
+    labs(x = "", y = "LISI_g", title = "Conditions (Group Mixing)")
+
+p3
+```
+
+```{r}
+p4 <- lisi_scores$patches_con_full %>% 
+  ggplot(aes(x = reorder(Selection, LISI_c), y = LISI_c, fill = Selection)) +
+    geom_col() +
+    coord_flip() +
+    theme_minimal() +
+    theme(legend.position = "none") +
+    scale_fill_manual(values = color_map) +
+    labs(x = "", y = "LISI_c", title = "Conditions (Condition Mixing)")
+
+p4
+```
+
+```{r}
+# combine individual plots
+lisi_plots <- list(p1, p3, p2, p4)
+
+lisi_plots <- lapply(lisi_plots, function(p) {
+  p + theme(
+    text = element_text(size = 16),
+    plot.title = element_text(size = 18)
+  )
+})
+
+combined_plot <- wrap_plots(lisi_plots, ncol = 2, guides = "collect") +
+  plot_annotation(
+    title = "LISI Scores per Selection",
+    theme = theme(
+      plot.title = element_text(
+        hjust = 0.5,
+        margin = margin(b = 30),
+        size = 20,
+        face = "bold"
+      )
+    )
+  )
+
+# save and show combined plot
+ggsave("sel_lisi_full.png", combined_plot, path = "../../outs/sim/",
+       width = 12, height = 10, dpi = 300)
+combined_plot
+```
+
+```{r}
+p1 <- lisi_scores$patches_clu_con_hvg %>% 
+  ggplot(aes(x = reorder(Selection, LISI_g), y = LISI_g, fill = Selection)) +
+    geom_col() +
+    coord_flip() +
+    theme_minimal() +
+    theme(legend.position = "none") +
+    scale_fill_manual(values = color_map) +
+    labs(x = "", y = "LISI_g", title = "Groups & Conditions (Group Mixing)")
+
+p1
+```
+
+```{r}
+p2 <- lisi_scores$patches_clu_con_hvg %>% 
+  ggplot(aes(x = reorder(Selection, LISI_c), y = LISI_c, fill = Selection)) +
+    geom_col() +
+    coord_flip() +
+    theme_minimal() +
+    theme(legend.position = "none") +
+    scale_fill_manual(values = color_map) +
+    labs(x = "", y = "LISI_c", title = "Groups & Conditions (Condition Mixing)")
+
+p2
+```
+
+```{r}
+p3 <- lisi_scores$patches_con_hvg %>% 
+  ggplot(aes(x = reorder(Selection, LISI_g), y = LISI_g, fill = Selection)) +
+    geom_col() +
+    coord_flip() +
+    theme_minimal() +
+    theme(legend.position = "none") +
+    scale_fill_manual(values = color_map) +
+    labs(x = "", y = "LISI_g", title = "Conditions (Group Mixing)")
+
+p3
+```
+
+```{r}
+p4 <- lisi_scores$patches_con_hvg %>% 
+  ggplot(aes(x = reorder(Selection, LISI_c), y = LISI_c, fill = Selection)) +
+    geom_col() +
+    coord_flip() +
+    theme_minimal() +
+    theme(legend.position = "none") +
+    scale_fill_manual(values = color_map) +
+    labs(x = "", y = "LISI_c", title = "Conditions (Condition Mixing)")
+
+p4
+```
+
+```{r}
+# combine individual plots
+lisi_plots <- list(p1, p3, p2, p4)
+
+lisi_plots <- lapply(lisi_plots, function(p) {
+  p + theme(
+    text = element_text(size = 16),
+    plot.title = element_text(size = 18)
+  )
+})
+
+combined_plot <- wrap_plots(lisi_plots, ncol = 2, guides = "collect") +
+  plot_annotation(
+    title = "LISI Scores per Selection",
+    theme = theme(
+      plot.title = element_text(
+        hjust = 0.5,
+        margin = margin(b = 30),
+        size = 20,
+        face = "bold"
+      )
+    )
+  )
+
+# save and show combined plot
+ggsave("sel_lisi_hvg.png", combined_plot, path = "../../outs/sim/",
+       width = 12, height = 10, dpi = 300)
+combined_plot
+```
 
 
 
