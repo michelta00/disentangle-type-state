@@ -2351,6 +2351,292 @@ ggsave("sel_lisi_hvg.png", combined_plot, path = "../../outs/sim/",
 combined_plot
 ```
 
+### PCR
+
+```{r}
+# define selections to be used
+selections_clu_con <- c(
+  "all_genes",
+  "random",
+  "HVG",
+  "tF_sPVE",
+  "tF_sPBDS",
+  "tPVE_sPVE",
+  "sPVE_tF",
+  "sPBDS_tF",
+  "sPVE_tPVE",
+  "tMAV_sMAV",
+  "tEN_sEN",
+  "tMAD_sAD",
+  "sMAV_tMAV",
+  "sEN_tEN",
+  "sAD_tMAD"
+)
+
+selections_con <- c(
+  "all_genes",
+  "random",
+  "HVG",
+  "tF_sPVE",
+  "tF_sPBDS",
+  "tPVE_sPVE",
+  "sPVE_tF",
+  "sPBDS_tF",
+  "sPVE_tPVE",
+  "common_sMAV",
+  "common_sEN",
+  "common_sAD",
+  "sMAV_common",
+  "sEN_common",
+  "sAD_common"
+)
+
+all_sels <- unique(c(selections_clu_con, selections_con))
+color_map <- setNames(qualitative_hcl(21, palette = "Dark 3"), all_sels)
+```
+
+```{r}
+f <- function(x, id) {
+  # regress PCs on 'id's
+  y <- reducedDim(x, "PCA")
+  ve <- attr(y, "varExplained")
+  fit <- summary(lm(y~x[[id]]))
+  # sum across coefficients of determination weighted
+  # by variance explained & scale by total variance
+  r2 <- vapply(fit, \(.) .$adj.r.squared, numeric(1))
+  r2 <- r2[i <- r2 > 0]; ve <- ve[i]
+  sum(ve*r2)/sum(ve)
+}
+
+pcr_scores <- lapply(all_selections, function(df) {
+  
+  # determine if df holds group and condition selections or only condition selections
+  if ("tMAV" %in% colnames(df)) {
+    # df contains group and condition selections
+    selections <- selections_clu_con
+  } else {
+    # df contains only condition selections
+    selections <- selections_con
+  }
+  
+  # determine if df contains full or HVG data
+  if (dim(df)[1] == dim(sce_full)[1]) {
+    # df contains full data
+    sce_iter <- sce_full
+  } else {
+    # df contains HVG data
+    sce_iter <- sce_hvg
+  }
+  
+  # calculate LISI scores
+  pcr_scores <- list()
+  for (selection in selections) {
+    
+    # set seed
+    set.seed(42)
+    
+    # dimensionality reduction and data extraction
+    sce_iter <- runPCA(sce_iter, subset_row=df[[selection]])
+    ids <- c(
+      PCR_g="cluster_id",
+      PCR_c="group_id"
+    )
+    
+    # PCR score calculation
+    res <- sapply(names(ids), \(sta) f(sce_iter, ids[sta]))
+    
+    pcr_scores[[selection]] <- data.frame(
+      Selection = selection,
+      PCR_g = unname(res["PCR_g"]),
+      PCR_c = unname(res["PCR_c"])
+    )
+    
+  }
+  
+  results <- do.call(rbind, pcr_scores)
+  results$Selection <- factor(results$Selection, levels = results$Selection)
+  return(results)
+  
+})
+```
+
+```{r}
+p1 <- pcr_scores$patches_clu_con_full %>% 
+  ggplot(aes(x = reorder(Selection, PCR_g), y = PCR_g, fill = Selection)) +
+    geom_col() +
+    coord_flip() +
+    theme_minimal() +
+    theme(legend.position = "none") +
+    scale_fill_manual(values = color_map) +
+    labs(x = "", y = "PCR_g", title = "Groups & Conditions (Group Variance)")
+
+p1
+```
+
+```{r}
+p2 <- pcr_scores$patches_clu_con_full %>% 
+  ggplot(aes(x = reorder(Selection, PCR_c), y = PCR_c, fill = Selection)) +
+    geom_col() +
+    coord_flip() +
+    theme_minimal() +
+    theme(legend.position = "none") +
+    scale_fill_manual(values = color_map) +
+    labs(x = "", y = "PCR_c", title = "Groups & Conditions (Condition Variance)")
+
+p2
+```
+
+```{r}
+p3 <- pcr_scores$patches_con_full %>% 
+  ggplot(aes(x = reorder(Selection, PCR_g), y = PCR_g, fill = Selection)) +
+    geom_col() +
+    coord_flip() +
+    theme_minimal() +
+    theme(legend.position = "none") +
+    scale_fill_manual(values = color_map) +
+    labs(x = "", y = "PCR_g", title = "Conditions (Group Variance)")
+
+p3
+```
+
+```{r}
+p4 <- pcr_scores$patches_con_full %>% 
+  ggplot(aes(x = reorder(Selection, PCR_c), y = PCR_c, fill = Selection)) +
+    geom_col() +
+    coord_flip() +
+    theme_minimal() +
+    theme(legend.position = "none") +
+    scale_fill_manual(values = color_map) +
+    labs(x = "", y = "PCR_c", title = "Conditions (Condition Variance)")
+
+p4
+```
+
+```{r}
+# combine individual plots
+lisi_plots <- list(p1, p3, p2, p4)
+
+lisi_plots <- lapply(lisi_plots, function(p) {
+  p + theme(
+    text = element_text(size = 16),
+    plot.title = element_text(size = 18)
+  )
+})
+
+combined_plot <- wrap_plots(lisi_plots, ncol = 2, guides = "collect") +
+  plot_annotation(
+    title = "PCR Scores per Selection",
+    theme = theme(
+      plot.title = element_text(
+        hjust = 0.5,
+        margin = margin(b = 30),
+        size = 20,
+        face = "bold"
+      )
+    )
+  )
+
+# save and show combined plot
+ggsave("sel_pcr_full.png", combined_plot, path = "../../outs/sim/",
+       width = 12, height = 10, dpi = 300)
+combined_plot
+```
+
+```{r}
+p1 <- pcr_scores$patches_clu_con_hvg %>% 
+  ggplot(aes(x = reorder(Selection, PCR_g), y = PCR_g, fill = Selection)) +
+    geom_col() +
+    coord_flip() +
+    theme_minimal() +
+    theme(legend.position = "none") +
+    scale_fill_manual(values = color_map) +
+    labs(x = "", y = "PCR_g", title = "Groups & Conditions (Group Variance)")
+
+p1
+```
+
+```{r}
+p2 <- pcr_scores$patches_clu_con_hvg %>% 
+  ggplot(aes(x = reorder(Selection, PCR_c), y = PCR_c, fill = Selection)) +
+    geom_col() +
+    coord_flip() +
+    theme_minimal() +
+    theme(legend.position = "none") +
+    scale_fill_manual(values = color_map) +
+    labs(x = "", y = "PCR_c", title = "Groups & Conditions (Condition Variance)")
+
+p2
+```
+
+```{r}
+p3 <- pcr_scores$patches_con_hvg %>% 
+  ggplot(aes(x = reorder(Selection, PCR_g), y = PCR_g, fill = Selection)) +
+    geom_col() +
+    coord_flip() +
+    theme_minimal() +
+    theme(legend.position = "none") +
+    scale_fill_manual(values = color_map) +
+    labs(x = "", y = "PCR_g", title = "Conditions (Group Variance)")
+
+p3
+```
+
+```{r}
+p4 <- pcr_scores$patches_con_hvg %>% 
+  ggplot(aes(x = reorder(Selection, PCR_c), y = PCR_c, fill = Selection)) +
+    geom_col() +
+    coord_flip() +
+    theme_minimal() +
+    theme(legend.position = "none") +
+    scale_fill_manual(values = color_map) +
+    labs(x = "", y = "PCR_c", title = "Conditions (Condition Variance)")
+
+p4
+```
+
+```{r}
+# combine individual plots
+lisi_plots <- list(p1, p3, p2, p4)
+
+lisi_plots <- lapply(lisi_plots, function(p) {
+  p + theme(
+    text = element_text(size = 16),
+    plot.title = element_text(size = 18)
+  )
+})
+
+combined_plot <- wrap_plots(lisi_plots, ncol = 2, guides = "collect") +
+  plot_annotation(
+    title = "PCR Scores per Selection",
+    theme = theme(
+      plot.title = element_text(
+        hjust = 0.5,
+        margin = margin(b = 30),
+        size = 20,
+        face = "bold"
+      )
+    )
+  )
+
+# save and show combined plot
+ggsave("sel_pcr_hvg.png", combined_plot, path = "../../outs/sim/",
+       width = 12, height = 10, dpi = 300)
+combined_plot
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 ## Old Code
