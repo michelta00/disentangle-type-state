@@ -2618,23 +2618,50 @@ head(emb)
 ```
 
 ```{r}
-emb_experiments <- emb$experiment
-color_map <- setNames(qualitative_hcl(5, palette = "Dark 3"), emb_experiments)
+emb_experiments <- c("Groups & Conditions (Patches)", "Condtions (Patches)", "Conditions (DISCoVeR)")
+color_map <- setNames(qualitative_hcl(3, palette = "Dark 3"), emb_experiments)
 ```
 
 ```{r}
 p1 <- emb %>% 
   filter(experiment %in% c("emb_clu_con_hvg", "emb_con_hvg", "emb_con_hvg_dis")) %>% 
-  ggplot(aes(x = reorder(experiment, mi_mean), y = mi_mean, fill = experiment)) +
+  mutate(name = c("Groups & Conditions (Patches)", "Condtions (Patches)", "Conditions (DISCoVeR)")) %>% 
+  ggplot(aes(x = reorder(name, mi_mean), y = mi_mean, fill = name)) +
     geom_col() +
     coord_flip() +
     geom_errorbar(aes(ymin = mi_mean - mi_std, ymax = mi_mean + mi_std), width = 0.2) +
     theme_minimal() +
-    theme(legend.position = "none") +
+    theme(
+      legend.position = "none",
+      text = element_text(size = 16)
+    ) +
     scale_fill_manual(values = color_map) +
-    labs(x = "", y = "MI", title = "Embeddings")
+    labs(x = "", y = "MI", title = "")
 
 p1
+```
+
+```{r}
+# combine individual plots
+mi_plots <- list(p1)
+
+combined_plot <- wrap_plots(mi_plots, ncol = 1, guides = "collect") +
+  plot_annotation(
+    title = "MI Scores per Workflow Embeddings",
+    theme = theme(
+      plot.title = element_text(
+        hjust = 0.5,
+        margin = margin(b = 30),
+        size = 20,
+        face = "bold"
+      )
+    )
+  )
+
+# save and show combined plot
+ggsave("emb_mi.png", combined_plot, path = "../../outs/sim/",
+       width = 8, height = 6, dpi = 300)
+combined_plot
 ```
 
 #### Selections
@@ -2657,7 +2684,11 @@ p2 <- sel %>%
     coord_flip() +
     geom_errorbar(aes(ymin = mi_mean - mi_std, ymax = mi_mean + mi_std), width = 0.2) +
     theme_minimal() +
-    theme(legend.position = "none") +
+    theme(
+      legend.position = "none",
+      plot.title = element_text(size = 18),
+      text = element_text(size = 16)
+    ) +
     scale_fill_manual(values = color_map) +
     labs(x = "", y = "MI", title = "Groups & Conditions")
 
@@ -2672,11 +2703,38 @@ p3 <- sel %>%
     coord_flip() +
     geom_errorbar(aes(ymin = mi_mean - mi_std, ymax = mi_mean + mi_std), width = 0.2) +
     theme_minimal() +
-    theme(legend.position = "none") +
+    theme(
+      legend.position = "none",
+      plot.title = element_text(size = 18),
+      text = element_text(size = 16)
+    ) +
     scale_fill_manual(values = color_map) +
     labs(x = "", y = "MI", title = "Conditions")
 
 p3
+```
+
+```{r}
+# combine individual plots
+mi_plots <- list(p2, p3)
+
+combined_plot <- wrap_plots(mi_plots, ncol = 2, guides = "collect") +
+  plot_annotation(
+    title = "MI Scores per Selection Pair",
+    theme = theme(
+      plot.title = element_text(
+        hjust = 0.5,
+        margin = margin(b = 30),
+        size = 20,
+        face = "bold"
+      )
+    )
+  )
+
+# save and show combined plot
+ggsave("sel_mi_full.png", combined_plot, path = "../../outs/sim/",
+       width = 15, height = 6, dpi = 300)
+combined_plot
 ```
 
 ```{r}
@@ -2687,7 +2745,11 @@ p4 <- sel %>%
     coord_flip() +
     geom_errorbar(aes(ymin = mi_mean - mi_std, ymax = mi_mean + mi_std), width = 0.2) +
     theme_minimal() +
-    theme(legend.position = "none") +
+    theme(
+      legend.position = "none",
+      plot.title = element_text(size = 18),
+      text = element_text(size = 16)
+    ) +
     scale_fill_manual(values = color_map) +
     labs(x = "", y = "MI", title = "Groups & Conditions")
 
@@ -2702,13 +2764,39 @@ p5 <- sel %>%
     coord_flip() +
     geom_errorbar(aes(ymin = mi_mean - mi_std, ymax = mi_mean + mi_std), width = 0.2) +
     theme_minimal() +
-    theme(legend.position = "none") +
+    theme(
+      legend.position = "none",
+      plot.title = element_text(size = 18),
+      text = element_text(size = 16)
+    ) +
     scale_fill_manual(values = color_map) +
     labs(x = "", y = "MI", title = "Conditions")
 
 p5
 ```
 
+```{r}
+# combine individual plots
+mi_plots <- list(p4, p5)
+
+combined_plot <- wrap_plots(mi_plots, ncol = 2, guides = "collect") +
+  plot_annotation(
+    title = "MI Scores per Selection Pair",
+    theme = theme(
+      plot.title = element_text(
+        hjust = 0.5,
+        margin = margin(b = 30),
+        size = 20,
+        face = "bold"
+      )
+    )
+  )
+
+# save and show combined plot
+ggsave("sel_mi_hvg.png", combined_plot, path = "../../outs/sim/",
+       width = 15, height = 6, dpi = 300)
+combined_plot
+```
 
 
 
