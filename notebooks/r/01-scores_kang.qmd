@@ -1384,8 +1384,8 @@ lisi_scores <- lapply(all_selections, function(df) {
     y <- reducedDim(sce_iter, "PCA")
     cd <- colData(sce_iter)
     by <- c(
-      LISI_c="group_id",
-      LISI_g="cluster_id"
+      LISI_cn="group_id",
+      LISI_ct="cluster_id"
     )
     
     # LISI score calculation
@@ -1397,8 +1397,8 @@ lisi_scores <- lapply(all_selections, function(df) {
     
     lisi_scores[[selection]] <- data.frame(
       Selection = selection,
-      LISI_g = unname(res["LISI_g"]),
-      LISI_c = unname(res["LISI_c"])
+      LISI_ct = unname(res["LISI_ct"]),
+      LISI_cn = unname(res["LISI_cn"])
     )
     
   }
@@ -1412,52 +1412,52 @@ lisi_scores <- lapply(all_selections, function(df) {
 
 ```{r}
 p1 <- lisi_scores$Kang18_clu_con %>% 
-  ggplot(aes(x = reorder(Selection, LISI_g), y = LISI_g, fill = Selection)) +
+  ggplot(aes(x = reorder(Selection, LISI_ct), y = LISI_ct, fill = Selection)) +
     geom_col() +
     coord_flip() +
     theme_minimal() +
     theme(legend.position = "none") +
     scale_fill_manual(values = color_map) +
-    labs(x = "", y = "LISI_g", title = "Groups & Conditions (Group Mixing)")
+    labs(x = "", y = "LISI_ct", title = "Cell Types & Conditions (Type Mixing)")
 
 p1
 ```
 
 ```{r}
 p2 <- lisi_scores$Kang18_clu_con %>% 
-  ggplot(aes(x = reorder(Selection, LISI_c), y = LISI_c, fill = Selection)) +
+  ggplot(aes(x = reorder(Selection, LISI_cn), y = LISI_cn, fill = Selection)) +
     geom_col() +
     coord_flip() +
     theme_minimal() +
     theme(legend.position = "none") +
     scale_fill_manual(values = color_map) +
-    labs(x = "", y = "LISI_c", title = "Groups & Conditions (Condition Mixing)")
+    labs(x = "", y = "LISI_cn", title = "Cell Types & Conditions (Condition Mixing)")
 
 p2
 ```
 
 ```{r}
 p3 <- lisi_scores$Kang18_con %>% 
-  ggplot(aes(x = reorder(Selection, LISI_g), y = LISI_g, fill = Selection)) +
+  ggplot(aes(x = reorder(Selection, LISI_ct), y = LISI_ct, fill = Selection)) +
     geom_col() +
     coord_flip() +
     theme_minimal() +
     theme(legend.position = "none") +
     scale_fill_manual(values = color_map) +
-    labs(x = "", y = "LISI_g", title = "Conditions (Group Mixing)")
+    labs(x = "", y = "LISI_ct", title = "Conditions (Type Mixing)")
 
 p3
 ```
 
 ```{r}
 p4 <- lisi_scores$Kang18_con %>% 
-  ggplot(aes(x = reorder(Selection, LISI_c), y = LISI_c, fill = Selection)) +
+  ggplot(aes(x = reorder(Selection, LISI_cn), y = LISI_cn, fill = Selection)) +
     geom_col() +
     coord_flip() +
     theme_minimal() +
     theme(legend.position = "none") +
     scale_fill_manual(values = color_map) +
-    labs(x = "", y = "LISI_c", title = "Conditions (Condition Mixing)")
+    labs(x = "", y = "LISI_cn", title = "Conditions (Condition Mixing)")
 
 p4
 ```
@@ -1562,7 +1562,7 @@ pcr_scores <- lapply(all_selections, function(df) {
   
   sce_iter <- sce
   
-  # calculate LISI scores
+  # calculate PCR scores
   pcr_scores <- list()
   for (selection in selections) {
     
@@ -1572,8 +1572,8 @@ pcr_scores <- lapply(all_selections, function(df) {
     # dimensionality reduction and data extraction
     sce_iter <- runPCA(sce_iter, subset_row=df[[selection]])
     ids <- c(
-      PCR_g="cluster_id",
-      PCR_c="group_id"
+      PCR_ct="cluster_id",
+      PCR_cn="group_id"
     )
     
     # PCR score calculation
@@ -1581,8 +1581,8 @@ pcr_scores <- lapply(all_selections, function(df) {
     
     pcr_scores[[selection]] <- data.frame(
       Selection = selection,
-      PCR_g = unname(res["PCR_g"]),
-      PCR_c = unname(res["PCR_c"])
+      PCR_ct = unname(res["PCR_ct"]),
+      PCR_cn = unname(res["PCR_cn"])
     )
     
   }
@@ -1596,68 +1596,68 @@ pcr_scores <- lapply(all_selections, function(df) {
 
 ```{r}
 p1 <- pcr_scores$Kang18_clu_con %>% 
-  ggplot(aes(x = reorder(Selection, PCR_g), y = PCR_g, fill = Selection)) +
+  ggplot(aes(x = reorder(Selection, PCR_ct), y = PCR_ct, fill = Selection)) +
     geom_col() +
     coord_flip() +
     theme_minimal() +
     theme(legend.position = "none") +
     scale_fill_manual(values = color_map) +
-    labs(x = "", y = "PCR_g", title = "Groups & Conditions (Group Variance)")
+    labs(x = "", y = "PCR_ct", title = "Cell Types & Conditions (Type Variance)")
 
 p1
 ```
 
 ```{r}
 p2 <- pcr_scores$Kang18_clu_con %>% 
-  ggplot(aes(x = reorder(Selection, PCR_c), y = PCR_c, fill = Selection)) +
+  ggplot(aes(x = reorder(Selection, PCR_cn), y = PCR_cn, fill = Selection)) +
     geom_col() +
     coord_flip() +
     theme_minimal() +
     theme(legend.position = "none") +
     scale_fill_manual(values = color_map) +
-    labs(x = "", y = "PCR_c", title = "Groups & Conditions (Condition Variance)")
+    labs(x = "", y = "PCR_cn", title = "Cell Types & Conditions (Condition Variance)")
 
 p2
 ```
 
 ```{r}
 p3 <- pcr_scores$Kang18_con %>% 
-  ggplot(aes(x = reorder(Selection, PCR_g), y = PCR_g, fill = Selection)) +
+  ggplot(aes(x = reorder(Selection, PCR_ct), y = PCR_ct, fill = Selection)) +
     geom_col() +
     coord_flip() +
     theme_minimal() +
     theme(legend.position = "none") +
     scale_fill_manual(values = color_map) +
-    labs(x = "", y = "PCR_g", title = "Conditions (Group Variance)")
+    labs(x = "", y = "PCR_ct", title = "Conditions (Type Variance)")
 
 p3
 ```
 
 ```{r}
 p4 <- pcr_scores$Kang18_con %>% 
-  ggplot(aes(x = reorder(Selection, PCR_c), y = PCR_c, fill = Selection)) +
+  ggplot(aes(x = reorder(Selection, PCR_cn), y = PCR_cn, fill = Selection)) +
     geom_col() +
     coord_flip() +
     theme_minimal() +
     theme(legend.position = "none") +
     scale_fill_manual(values = color_map) +
-    labs(x = "", y = "PCR_c", title = "Conditions (Condition Variance)")
+    labs(x = "", y = "PCR_cn", title = "Conditions (Condition Variance)")
 
 p4
 ```
 
 ```{r}
 # combine individual plots
-lisi_plots <- list(p1, p3, p2, p4)
+pcr_plots <- list(p1, p3, p2, p4)
 
-lisi_plots <- lapply(lisi_plots, function(p) {
+pcr_plots <- lapply(pcr_plots, function(p) {
   p + theme(
     text = element_text(size = 16),
     plot.title = element_text(size = 18)
   )
 })
 
-combined_plot <- wrap_plots(lisi_plots, ncol = 2, guides = "collect") +
+combined_plot <- wrap_plots(pcr_plots, ncol = 2, guides = "collect") +
   plot_annotation(
     title = "PCR Scores per Selection",
     theme = theme(

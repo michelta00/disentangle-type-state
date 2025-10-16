@@ -1953,12 +1953,7 @@ combined_plot
 ```
 
 ```{r}
-p3 <- bind_cols(
-  ari_scores$patches_clu_con_full,
-  ari_scores$patches_clu_con_hvg %>% select(-Selection)
-) %>% 
-  rename(Full = ARI...2, HVG = ARI...3) %>% 
-  pivot_longer(cols = Full, names_to = "Data", values_to = "ARI") %>% 
+p3 <- ari_scores$patches_clu_con_full %>% 
   ggplot(aes(x = reorder(Selection, ARI), y = ARI, fill = Selection)) +
     geom_col() +
     coord_flip() +
@@ -1971,12 +1966,7 @@ p3
 ```
 
 ```{r}
-p4 <- bind_cols(
-  ari_scores$patches_con_full,
-  ari_scores$patches_con_hvg %>% select(-Selection)
-) %>% 
-  rename(Full = ARI...2, HVG = ARI...3) %>% 
-  pivot_longer(cols = Full, names_to = "Data", values_to = "ARI") %>% 
+p4 <- ari_scores$patches_con_full %>% 
   ggplot(aes(x = reorder(Selection, ARI), y = ARI, fill = Selection)) +
     geom_col() +
     coord_flip() +
@@ -2019,12 +2009,7 @@ combined_plot
 ```
 
 ```{r}
-p5 <- bind_cols(
-  ari_scores$patches_clu_con_full,
-  ari_scores$patches_clu_con_hvg %>% select(-Selection)
-) %>% 
-  rename(Full = ARI...2, HVG = ARI...3) %>% 
-  pivot_longer(cols = HVG, names_to = "Data", values_to = "ARI") %>% 
+p5 <- ari_scores$patches_clu_con_hvg %>% 
   ggplot(aes(x = reorder(Selection, ARI), y = ARI, fill = Selection)) +
     geom_col() +
     coord_flip() +
@@ -2037,12 +2022,7 @@ p5
 ```
 
 ```{r}
-p6 <- bind_cols(
-  ari_scores$patches_con_full,
-  ari_scores$patches_con_hvg %>% select(-Selection)
-) %>% 
-  rename(Full = ARI...2, HVG = ARI...3) %>% 
-  pivot_longer(cols = HVG, names_to = "Data", values_to = "ARI") %>% 
+p6 <- ari_scores$patches_con_hvg %>% 
   ggplot(aes(x = reorder(Selection, ARI), y = ARI, fill = Selection)) +
     geom_col() +
     coord_flip() +
@@ -2428,7 +2408,7 @@ pcr_scores <- lapply(all_selections, function(df) {
     sce_iter <- sce_hvg
   }
   
-  # calculate LISI scores
+  # calculate PCR scores
   pcr_scores <- list()
   for (selection in selections) {
     
@@ -2514,16 +2494,16 @@ p4
 
 ```{r}
 # combine individual plots
-lisi_plots <- list(p1, p3, p2, p4)
+pcr_plots <- list(p1, p3, p2, p4)
 
-lisi_plots <- lapply(lisi_plots, function(p) {
+pcr_plots <- lapply(pcr_plots, function(p) {
   p + theme(
     text = element_text(size = 16),
     plot.title = element_text(size = 18)
   )
 })
 
-combined_plot <- wrap_plots(lisi_plots, ncol = 2, guides = "collect") +
+combined_plot <- wrap_plots(pcr_plots, ncol = 2, guides = "collect") +
   plot_annotation(
     title = "PCR Scores per Selection",
     theme = theme(
@@ -2596,16 +2576,16 @@ p4
 
 ```{r}
 # combine individual plots
-lisi_plots <- list(p1, p3, p2, p4)
+pcr_plots <- list(p1, p3, p2, p4)
 
-lisi_plots <- lapply(lisi_plots, function(p) {
+pcr_plots <- lapply(pcr_plots, function(p) {
   p + theme(
     text = element_text(size = 16),
     plot.title = element_text(size = 18)
   )
 })
 
-combined_plot <- wrap_plots(lisi_plots, ncol = 2, guides = "collect") +
+combined_plot <- wrap_plots(pcr_plots, ncol = 2, guides = "collect") +
   plot_annotation(
     title = "PCR Scores per Selection",
     theme = theme(
