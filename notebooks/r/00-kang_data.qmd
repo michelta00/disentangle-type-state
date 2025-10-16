@@ -51,6 +51,32 @@ cat("Cell metadata: \n", colnames(cd), "\n \n")
 ```
 
 ```{r}
+cd %>% 
+  select(cluster_id) %>% 
+  count(cluster_id) %>% 
+  mutate(proportion = n / sum(n)) %>% 
+  arrange(desc(proportion))
+```
+
+```{r}
+# Example: use PCA space
+pca <- reducedDim(sce, "PCA")
+
+# Extract cell types
+ct <- colData(sce)$cluster_id
+
+# Compute mean pairwise distance per cell type
+dist_by_type <- lapply(unique(ct), function(t) {
+  mat <- pca[ct == t, , drop = FALSE]
+  d <- dist(mat)
+  mean(as.numeric(d))
+}) %>%
+  setNames(unique(ct))
+
+dist_by_type
+```
+
+```{r}
 cd$UMAP1 <- reducedDim(sce, "UMAP")[ , 1]
 cd$UMAP2 <- reducedDim(sce, "UMAP")[ , 2]
 cd$TSNE1 <- reducedDim(sce, "TSNE")[ , 1]
