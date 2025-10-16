@@ -1492,6 +1492,174 @@ ggsave("sel_lisi.png", combined_plot, path = "../../outs/kang/",
 combined_plot
 ```
 
+```{r}
+p1 <- lisi_scores$Kang18_clu_con %>% 
+  ggplot(aes(x = LISI_ct, y = LISI_cn, color = Selection, label = Selection)) +
+    geom_point(size = 3) +
+    geom_text_repel(size = 5, show.legend = FALSE) + 
+    theme_minimal() +
+    theme(legend.position = "none") +
+    scale_color_manual(values = color_map) +
+    labs(x = "LISI_ct", y = "LISI_cn", title = "Cell Types & Conditions")
+
+p1
+```
+
+```{r}
+p2 <- lisi_scores$Kang18_con %>% 
+  ggplot(aes(x = LISI_ct, y = LISI_cn, color = Selection, label = Selection)) +
+    geom_point(size = 3) +
+    geom_text_repel(size = 5, show.legend = FALSE) + 
+    theme_minimal() +
+    theme(legend.position = "none") +
+    scale_color_manual(values = color_map) +
+    labs(x = "LISI_ct", y = "LISI_cn", title = "Conditions")
+
+p2
+```
+
+```{r}
+# combine individual plots
+lisi_plots <- list(p1, p2)
+
+lisi_plots <- lapply(lisi_plots, function(p) {
+  p + theme(
+    text = element_text(size = 16),
+    plot.title = element_text(size = 18)
+  )
+})
+
+combined_plot <- wrap_plots(lisi_plots, ncol = 2, guides = "collect") +
+  plot_annotation(
+    title = "LISI Scores per Selection",
+    theme = theme(
+      plot.title = element_text(
+        hjust = 0.5,
+        margin = margin(b = 30),
+        size = 20,
+        face = "bold"
+      )
+    )
+  )
+
+# save and show combined plot
+ggsave("sel_lisi2.png", combined_plot, path = "../../outs/kang/",
+       width = 12, height = 6, dpi = 300)
+combined_plot
+```
+
+```{r}
+lisi_scores_strat <- lapply(all_selections, function(df) {
+  
+  # determine if df holds group and condition selections or only condition selections
+  if ("tMAV" %in% colnames(df)) {
+    # df contains group and condition selections
+    selections <- selections_clu_con
+  } else {
+    # df contains only condition selections
+    selections <- selections_con
+  }
+  
+  sce_iter <- sce
+  
+  # get unique cell types
+  cell_types <- unique(colData(sce_iter)$cluster_id)
+  
+  # calculate LISI scores stratified by cell type
+  lisi_scores <- list()
+  
+  for (cell_type in cell_types) {
+    
+    # subset to current cell type
+    sce_subset <- sce_iter[, colData(sce_iter)$cluster_id == cell_type]
+    
+    for (selection in selections) {
+      
+      # set seed
+      set.seed(42)
+      
+      # dimensionality reduction and data extraction
+      sce_subset <- runPCA(sce_subset, subset_row=df[[selection]])
+      y <- reducedDim(sce_subset, "PCA")
+      cd <- colData(sce_subset)
+      
+      # define LISI variables (only group_id since we're stratified by cluster)
+      by <- c(
+        LISI_cn = "group_id"
+      )
+      
+      # LISI score calculation
+      res <- sapply(by, \(.) {
+        res <- compute_lisi(y, cd, .)
+        n <- length(unique(cd[[.]]))
+        # handle case where only one level exists in subset
+        if (n <= 1) {
+          return(NA)
+        }
+        (mean(res[[1]]) - 1) / (n - 1)
+      })
+      
+      # create unique key for cell_type + selection
+      key <- paste0(cell_type, "_", selection)
+      
+      lisi_scores[[key]] <- data.frame(
+        CellType = cell_type,
+        Selection = selection,
+        LISI_cn = unname(res["LISI_cn"])
+      )
+      
+    }
+  }
+  
+  results <- do.call(rbind, lisi_scores)
+  results$Selection <- factor(results$Selection, levels = unique(selections))
+  results$CellType <- factor(results$CellType, levels = sort(unique(cell_types)))
+  
+  return(results)
+  
+})
+```
+
+```{r}
+p1 <- lisi_scores_strat$Kang18_clu_con %>% 
+  ggplot(aes(x = reorder(Selection, LISI_cn), y = LISI_cn, fill = Selection)) +
+    geom_col() +
+    coord_flip() +
+    facet_wrap(~ CellType, scales = "free_y") + 
+    theme_minimal() +
+    theme(
+      legend.position = "none",
+      text = element_text(size = 16)
+    ) +
+    scale_fill_manual(values = color_map) +
+    labs(x = "", y = "LISI_cn", title = "Cell Types & Conditions")
+
+ggsave("sel_lisi_strat_clu_con.png", p1, path = "../../outs/kang/",
+       width = 12, height = 10, dpi = 300)
+
+p1
+```
+
+```{r}
+p2 <- lisi_scores_strat$Kang18_con %>% 
+  ggplot(aes(x = reorder(Selection, LISI_cn), y = LISI_cn, fill = Selection)) +
+    geom_col() +
+    coord_flip() +
+    facet_wrap(~ CellType, scales = "free_y") + 
+    theme_minimal() +
+    theme(
+      legend.position = "none",
+      text = element_text(size = 16)
+    ) +
+    scale_fill_manual(values = color_map) +
+    labs(x = "", y = "LISI_cn", title = "Conditions")
+
+ggsave("sel_lisi_strat_con.png", p2, path = "../../outs/kang/",
+       width = 12, height = 10, dpi = 300)
+
+p2
+```
+
 ### PCR
 
 ```{r}
@@ -1675,6 +1843,171 @@ ggsave("sel_pcr.png", combined_plot, path = "../../outs/kang/",
        width = 12, height = 10, dpi = 300)
 combined_plot
 ```
+
+```{r}
+p1 <- pcr_scores$Kang18_clu_con %>% 
+  ggplot(aes(x = PCR_ct, y = PCR_cn, color = Selection, label = Selection)) +
+    geom_point(size = 3) +
+    geom_text_repel(size = 5, show.legend = FALSE) + 
+    theme_minimal() +
+    theme(legend.position = "none") +
+    scale_color_manual(values = color_map) +
+    labs(x = "PCR_ct", y = "PCR_cn", title = "Cell Types & Conditions")
+
+p1
+```
+
+```{r}
+p2 <- pcr_scores$Kang18_con %>% 
+  ggplot(aes(x = PCR_ct, y = PCR_cn, color = Selection, label = Selection)) +
+    geom_point(size = 3) +
+    geom_text_repel(size = 5, show.legend = FALSE) + 
+    theme_minimal() +
+    theme(legend.position = "none") +
+    scale_color_manual(values = color_map) +
+    labs(x = "PCR_ct", y = "PCR_cn", title = "Conditions")
+
+p2
+```
+
+```{r}
+# combine individual plots
+pcr_plots <- list(p1, p2)
+
+pcr_plots <- lapply(pcr_plots, function(p) {
+  p + theme(
+    text = element_text(size = 16),
+    plot.title = element_text(size = 18)
+  )
+})
+
+combined_plot <- wrap_plots(pcr_plots, ncol = 2, guides = "collect") +
+  plot_annotation(
+    title = "PCR Scores per Selection",
+    theme = theme(
+      plot.title = element_text(
+        hjust = 0.5,
+        margin = margin(b = 30),
+        size = 20,
+        face = "bold"
+      )
+    )
+  )
+
+# save and show combined plot
+ggsave("sel_pcr2.png", combined_plot, path = "../../outs/kang/",
+       width = 12, height = 6, dpi = 300)
+combined_plot
+```
+
+```{r}
+pcr_scores_strat <- lapply(all_selections, function(df) {
+  
+  # determine if df holds group and condition selections or only condition selections
+  if ("tMAV" %in% colnames(df)) {
+    # df contains group and condition selections
+    selections <- selections_clu_con
+  } else {
+    # df contains only condition selections
+    selections <- selections_con
+  }
+  
+  sce_iter <- sce
+  
+  # get unique cell types
+  cell_types <- unique(colData(sce_iter)$cluster_id)
+  
+  # calculate PCR scores stratified by cell type
+  pcr_scores <- list()
+  
+  for (cell_type in cell_types) {
+    
+    # subset to current cell type
+    sce_subset <- sce_iter[, colData(sce_iter)$cluster_id == cell_type]
+    
+    for (selection in selections) {
+      
+      # set seed
+      set.seed(42)
+      
+      # dimensionality reduction and data extraction
+      sce_subset <- runPCA(sce_subset, subset_row=df[[selection]])
+      
+      # define PCR variables (only group_id since we're stratified by cluster)
+      ids <- c(
+        PCR_cn = "group_id"
+      )
+      
+      # PCR score calculation
+      res <- sapply(names(ids), \(sta) {
+        # handle case where only one level exists in subset
+        if (length(unique(colData(sce_subset)[[ids[sta]]])) <= 1) {
+          return(NA)
+        }
+        f(sce_subset, ids[sta])
+      })
+      
+      # create unique key for cell_type + selection
+      key <- paste0(cell_type, "_", selection)
+      
+      pcr_scores[[key]] <- data.frame(
+        CellType = cell_type,
+        Selection = selection,
+        PCR_cn = unname(res["PCR_cn"])
+      )
+      
+    }
+  }
+  
+  results <- do.call(rbind, pcr_scores)
+  results$Selection <- factor(results$Selection, levels = unique(selections))
+  results$CellType <- factor(results$CellType, levels = sort(unique(cell_types)))
+  
+  return(results)
+  
+})
+```
+
+```{r}
+p1 <- pcr_scores_strat$Kang18_clu_con %>% 
+  ggplot(aes(x = reorder(Selection, PCR_cn), y = PCR_cn, fill = Selection)) +
+    geom_col() +
+    coord_flip() +
+    facet_wrap(~ CellType, scales = "free_y") + 
+    theme_minimal() +
+    theme(
+      legend.position = "none",
+      text = element_text(size = 16)
+    ) +
+    scale_fill_manual(values = color_map) +
+    labs(x = "", y = "PCR_cn", title = "Cell Types & Conditions")
+
+ggsave("sel_pcr_strat_clu_con.png", p1, path = "../../outs/kang/",
+       width = 12, height = 10, dpi = 300)
+
+p1
+```
+
+```{r}
+p2 <- pcr_scores_strat$Kang18_con %>% 
+  ggplot(aes(x = reorder(Selection, PCR_cn), y = PCR_cn, fill = Selection)) +
+    geom_col() +
+    coord_flip() +
+    facet_wrap(~ CellType, scales = "free_y") + 
+    theme_minimal() +
+    theme(
+      legend.position = "none",
+      text = element_text(size = 16)
+    ) +
+    scale_fill_manual(values = color_map) +
+    labs(x = "", y = "PCR_cn", title = "Conditions")
+
+ggsave("sel_pcr_strat_con.png", p2, path = "../../outs/kang/",
+       width = 12, height = 10, dpi = 300)
+
+p2
+```
+
 
 ### MI
 
