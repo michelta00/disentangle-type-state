@@ -2860,7 +2860,7 @@ p1 <- emb %>%
       text = element_text(size = 16)
     ) +
     scale_fill_manual(values = color_map) +
-    labs(x = "", y = "MI", title = "")
+    labs(x = "", y = "NMI", title = "")
 
 p1
 ```
@@ -2914,7 +2914,7 @@ p2 <- sel %>%
       text = element_text(size = 16)
     ) +
     scale_fill_manual(values = color_map) +
-    labs(x = "", y = "MI", title = "Groups & Conditions")
+    labs(x = "", y = "NMI", title = "Groups & Conditions")
 
 p2
 ```
@@ -2933,7 +2933,7 @@ p3 <- sel %>%
       text = element_text(size = 16)
     ) +
     scale_fill_manual(values = color_map) +
-    labs(x = "", y = "MI", title = "Conditions")
+    labs(x = "", y = "NMI", title = "Conditions")
 
 p3
 ```
@@ -2975,7 +2975,7 @@ p4 <- sel %>%
       text = element_text(size = 16)
     ) +
     scale_fill_manual(values = color_map) +
-    labs(x = "", y = "MI", title = "Groups & Conditions")
+    labs(x = "", y = "NMI", title = "Groups & Conditions")
 
 p4
 ```
@@ -2994,7 +2994,7 @@ p5 <- sel %>%
       text = element_text(size = 16)
     ) +
     scale_fill_manual(values = color_map) +
-    labs(x = "", y = "MI", title = "Conditions")
+    labs(x = "", y = "NMI", title = "Conditions")
 
 p5
 ```
