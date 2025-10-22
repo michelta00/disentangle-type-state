@@ -1,5 +1,5 @@
 ---
-title: "Kang Data"
+title: "Experimental Data"
 author: "Michel Tarnow"
 date: today
 format: 
@@ -24,6 +24,9 @@ suppressPackageStartupMessages({
 ```
 
 ## Load Data
+
+Experimental data obtained via snakemake workflow from https://github.com/HelenaLC/type-state. Data is originally from: 
+Kang et al. (2018) Multiplexed droplet single-cell RNA-sequencing using natural genetic variation. Nature Biotechnology 36: 89-94
 
 ```{r}
 sce_raw <- readRDS("../../data/kang/00-raw/Kang18.rds")
@@ -51,6 +54,7 @@ cat("Cell metadata: \n", colnames(cd), "\n \n")
 ```
 
 ```{r}
+# cell type proportions
 cd %>% 
   select(cluster_id) %>% 
   count(cluster_id) %>% 
@@ -59,13 +63,10 @@ cd %>%
 ```
 
 ```{r}
-# Example: use PCA space
+# distances in PCA space
 pca <- reducedDim(sce, "PCA")
-
-# Extract cell types
 ct <- colData(sce)$cluster_id
 
-# Compute mean pairwise distance per cell type
 dist_by_type <- lapply(unique(ct), function(t) {
   mat <- pca[ct == t, , drop = FALSE]
   d <- dist(mat)
@@ -75,6 +76,8 @@ dist_by_type <- lapply(unique(ct), function(t) {
 
 dist_by_type
 ```
+
+## Visualization
 
 ```{r}
 cd$UMAP1 <- reducedDim(sce, "UMAP")[ , 1]
@@ -133,7 +136,7 @@ ggplot(
   )
 
 ggsave(
-  "Kang18_data_umap_types.png",
+  "dat_types.png",
   last_plot(),
   path = "../../outs/kang/",
   width = 6,
@@ -167,7 +170,7 @@ ggplot(
   )
 
 ggsave(
-  "Kang18_data_umap_states.png",
+  "dat_states.png",
   last_plot(),
   path = "../../outs/kang/",
   width = 5,
@@ -204,152 +207,10 @@ cd %>%
     )
 
 ggsave(
-  "Kang18_data_umap_samples.png",
+  "dat_samples.png",
   last_plot(),
   path = "../../outs/kang/",
   width = 5,
-  height = 5,
-  dpi = 300
-)
-```
-
-```{r}
-ggplot(
-  data = cd,
-  mapping = aes(x = UMAP1, y = UMAP2, shape = group_id, colour = cluster_id)
-) +
-  geom_point(size = 1, alpha = 0.7) +
-  scale_colour_manual(values = cbf_palette[3:10]) +
-  labs(title = "",
-       x = "UMAP1",
-       y = "UMAP2",
-       shape = "Treatment",
-       colour = "Cell Type") +
-  theme_classic() +
-  theme(
-    text = element_text(size = 16),
-    plot.title = element_text(
-        hjust = 0.5,
-        size = 18,
-        face = "bold"
-      )
-  ) +
-  guides(
-    colour = guide_legend(override.aes = list(size = 3)),
-    shape = guide_legend(override.aes = list(size = 3))
-  )
-
-ggsave(
-  "Kang18_data_umap1.png",
-  last_plot(),
-  path = "../../outs/kang/",
-  width = 7,
-  height = 5,
-  dpi = 300
-)
-```
-
-```{r}
-ggplot(
-  data = cd,
-  mapping = aes(x = TSNE1, y = TSNE2, shape = group_id, colour = cluster_id)
-) +
-  geom_point(size = 1, alpha = 0.7) +
-  scale_colour_manual(values = cbf_palette[3:10]) +
-  labs(title = "",
-       x = "TSNE1",
-       y = "TSNE2",
-       shape = "Treatment",
-       colour = "Cell Type") +
-  theme_classic() +
-  theme(
-    text = element_text(size = 16),
-    plot.title = element_text(
-        hjust = 0.5,
-        size = 18,
-        face = "bold"
-      )
-  ) +
-  guides(
-    colour = guide_legend(override.aes = list(size = 3)),
-    shape = guide_legend(override.aes = list(size = 3))
-  )
-
-ggsave(
-  "Kang18_data_tsne1.png",
-  last_plot(),
-  path = "../../outs/kang/",
-  width = 7,
-  height = 5,
-  dpi = 300
-)
-```
-
-```{r}
-ggplot(
-  data = cd,
-  mapping = aes(x = UMAP1, y = UMAP2, colour = sample_id)
-) +
-  geom_point(size = 1, alpha = 0.7) +
-  scale_colour_manual(values = cbf_palette[1:8]) +
-  labs(title = "",
-       x = "UMAP1",
-       y = "UMAP2",
-       colour = "Sample") +
-  theme_classic() +
-  theme(
-    text = element_text(size = 16),
-    plot.title = element_text(
-        hjust = 0.5,
-        size = 18,
-        face = "bold"
-      )
-  ) +
-  guides(
-    colour = guide_legend(override.aes = list(size = 3)),
-    shape = guide_legend(override.aes = list(size = 3))
-  )
-
-ggsave(
-  "Kang18_data_umap2.png",
-  last_plot(),
-  path = "../../outs/kang/",
-  width = 7,
-  height = 5,
-  dpi = 300
-)
-```
-
-```{r}
-ggplot(
-  data = cd,
-  mapping = aes(x = TSNE1, y = TSNE2, colour = sample_id)
-) +
-  geom_point(size = 1, alpha = 0.7) +
-  scale_colour_manual(values = cbf_palette[1:8]) +
-  labs(title = "",
-       x = "TSNE1",
-       y = "TSNE2",
-       colour = "Sample") +
-  theme_classic() +
-  theme(
-    text = element_text(size = 16),
-    plot.title = element_text(
-        hjust = 0.5,
-        size = 18,
-        face = "bold"
-      )
-  ) +
-  guides(
-    colour = guide_legend(override.aes = list(size = 3)),
-    shape = guide_legend(override.aes = list(size = 3))
-  )
-
-ggsave(
-  "Kang18_data_tsne2.png",
-  last_plot(),
-  path = "../../outs/kang/",
-  width = 7,
   height = 5,
   dpi = 300
 )

@@ -1,5 +1,5 @@
 ---
-title: "Cell Type and State Simulation Data"
+title: "Simulation Data"
 author: "Michel Tarnow"
 date: today
 format: 
@@ -23,6 +23,8 @@ suppressPackageStartupMessages({
 ```
 
 ## Load Data
+
+Simulation data obtained via snakemake workflow from https://github.com/HelenaLC/type-state.
 
 ```{r}
 sce_raw <- readRDS("../../data/sim/00-raw/t100,s80,b0.rds")
@@ -48,6 +50,8 @@ cat("Assays: \n", assayNames(sce), "\n \n")
 cat("Gene metadata: \n", colnames(rd), "\n \n")
 cat("Cell metadata: \n", colnames(cd), "\n \n")
 ```
+
+## Visualization
 
 ```{r}
 cbf_palette = c(
@@ -100,7 +104,7 @@ ggplot(
   )
 
 ggsave(
-  "sim_data_group.png",
+  "dat_group.png",
   last_plot(),
   path = "../../outs/sim/",
   width = 7,
@@ -135,43 +139,7 @@ ggplot(
   )
 
 ggsave(
-  "sim_data_condition.png",
-  last_plot(),
-  path = "../../outs/sim/",
-  width = 7,
-  height = 5,
-  dpi = 300
-)
-```
-
-```{r}
-ggplot(
-  data = cd,
-  mapping = aes(x = PC1, y = PC2, shape = cluster_id, colour = group_id)
-) +
-  geom_point(size = 1.4, alpha = 0.7) +
-  scale_colour_manual(values = cbf_palette[1:2]) +
-  labs(title = "",
-       x = "PC1",
-       y = "PC2",
-       shape = "Group (Type)",
-       colour = "Condition (State)") +
-  theme_classic() +
-  theme(
-    text = element_text(size = 16),
-    plot.title = element_text(
-        hjust = 0.5,
-        size = 18,
-        face = "bold"
-      )
-  ) +
-  guides(
-    colour = guide_legend(override.aes = list(size = 3)),
-    shape = guide_legend(override.aes = list(size = 3))
-  )
-
-ggsave(
-  "sim_data1.png",
+  "dat_condition.png",
   last_plot(),
   path = "../../outs/sim/",
   width = 7,
@@ -206,7 +174,7 @@ ggplot(
   )
 
 ggsave(
-  "sim_data2.png",
+  "dat_sample.png",
   last_plot(),
   path = "../../outs/sim/",
   width = 7,
