@@ -1,0 +1,935 @@
+---
+title: "Selections - Simulation Data"
+author: "Michel Tarnow"
+date: today
+format: 
+    html:
+      toc: true
+      self-contained: true
+      highlight-style: github
+      code-line-numbers: true
+editor_options: 
+    chunk_output_type: inline
+---
+
+## Import Packages
+
+```{r}
+suppressPackageStartupMessages({
+  library(reshape2)
+  library(caret)
+  library(patchwork)
+  library(SingleCellExperiment)
+  library(zellkonverter)
+  library(tidyverse)
+  library(viridis)
+  library(rlang)
+})
+```
+
+
+## Import Scores
+
+```{r}
+patches_scores <- readRDS("../../data/sim/02-sco/patches_scores.rds")
+fss_scores <- readRDS("../../data/sim/02-sco/fss_scores.rds")
+all_scores <- readRDS("../../data/sim/02-sco/all_scores.rds")
+```
+
+
+
+## Load and Process Gene Ground Truths (FSS Selections)
+
+```{r}
+load_process_fss_selections <- function(files, hvgs) {
+  
+  # select gene id and selection columns and combine all dfs in one list
+  fss_selection_dfs <- lapply(files, function(file) {
+    
+    # read in df from file
+    df <- readRDS(file)
+    
+    # df contains a single selection
+    new_colname <- df$sel[1]
+    df <- df %>% 
+      rename(!!new_colname := sel_val)
+    cols_to_keep <- c("gene_id", new_colname)
+    
+    # select gene and score columns
+    df <- df %>% 
+      select(all_of(cols_to_keep))
+    
+    return(df)
+    
+  })
+  
+  # combine all dfs in one df
+  fss_selections_full <- as_tibble(reduce(
+    fss_selection_dfs, 
+    ~ inner_join(.x, .y, by = "gene_id")
+  ))
+  
+  # sort columns to put ground truths first
+  fss_selections_full <- fss_selections_full %>% 
+    select(gene_id, DEnotDS, DS, DSnotDE, DEgtDS, DSgtDE, DE, everything())
+  
+  # create df with only HVGs
+  fss_selections_hvg <- fss_selections_full %>% 
+    filter(gene_id %in% hvgs)
+  
+  # combine into list
+  fss_selections <- list(
+    fss_full = fss_selections_full,
+    fss_hvg = fss_selections_hvg
+  )
+  
+  return(fss_selections)
+  
+}
+```
+
+```{r}
+# get all files containing selections
+rds_files <- list.files(
+  "../../data/sim/03-sel/",
+  pattern = "^sel.*\\.rds$", 
+  full.names = TRUE
+)
+
+# get HVGs
+hvgs <- patches_scores$patches_clu_con_hvg$gene_id
+
+# load and process FSS selections
+fss_selections <- load_process_fss_selections(rds_files, hvgs)
+
+lapply(fss_selections, head)
+```
+
+```{r}
+# get number of genes to select from ground truth (match the number of ground
+# truth type (DEnotDS) and state (DS) genes for full and HVG data)
+nt_full <- sum(fss_selections$fss_full$DEnotDS)
+nt_hvg <- sum(fss_selections$fss_hvg$DEnotDS)
+ns_full <- sum(fss_selections$fss_full$DS)
+ns_hvg <- sum(fss_selections$fss_hvg$DS)
+
+# number of genes for DSnotDE
+nst_full <- sum(fss_selections$fss_full$DSnotDE)
+nst_hvg <- sum(fss_selections$fss_hvg$DSnotDE)
+```
+
+```{r}
+# add new FSS selections
+fss_selections <- lapply(fss_selections, function(df) {
+  
+  # determine if df contains full or HVG data and adjust n accordingly
+  full <- ifelse(dim(df)[1] > 1500, TRUE, FALSE)
+  nt <- ifelse(full, nt_full, nt_hvg)
+  ns <- ifelse(full, ns_full, ns_hvg)
+  nst <- ifelse(full, nst_full, nst_hvg)
+  
+  # determine if df contains full or HVG data and adjust score df accordingly
+  score_df <- if (full) {
+    fss_scores$fss_full
+  } else {
+    fss_scores$fss_hvg
+  }
+  
+  # tF and sPBDS
+  score_names <- c("tF", "sPBDS")
+  if (all(score_names %in% colnames(score_df))) {
+    
+    t <- rank(score_df[[score_names[1]]])
+    s <- rank(score_df[[score_names[2]]])
+    
+    # state not type
+    scores <- s - t
+    cutoff <- sort(scores, decreasing = TRUE)[ns]
+    df$sPBDS_tF <- scores >= cutoff
+    
+  }
+  
+  # tF and sPVE
+  score_names <- c("tF", "sPVE")
+  if (all(score_names %in% colnames(score_df))) {
+    
+    t <- rank(score_df[[score_names[1]]])
+    s <- rank(score_df[[score_names[2]]])
+    
+    # state not type
+    scores <- s - t
+    cutoff <- sort(scores, decreasing = TRUE)[ns]
+    df$sPVE_tF <- scores >= cutoff
+    
+  }
+  
+  # tPVE and sPVE
+  score_names <- c("tPVE", "sPVE")
+  if (all(score_names %in% colnames(score_df))) {
+    
+    t <- rank(score_df[[score_names[1]]])
+    s <- rank(score_df[[score_names[2]]])
+    
+    # state not type
+    scores <- s - t
+    cutoff <- sort(scores, decreasing = TRUE)[ns]
+    df$sPVE_tPVE <- scores >= cutoff
+    
+  }
+  
+  return(df)
+  
+})
+
+head(fss_selections)
+```
+
+
+
+## Compute Patches Selections
+
+```{r}
+patches_selections <- lapply(patches_scores, function(score_df) {
+  
+  # determine if df contains full or HVG data and adjust n accordingly
+  full <- ifelse(dim(score_df)[1] > 1500, TRUE, FALSE)
+  nt <- ifelse(full, nt_full, nt_hvg)
+  ns <- ifelse(full, ns_full, ns_hvg)
+  nst <- ifelse(full, nst_full, nst_hvg)
+  
+  # create binary df that contains binary selections based on scores
+  binary_df <- score_df
+  for (col in names(score_df)) {
+    
+    # determine whether score is a type or state score and adjust n accordingly 
+    if (grepl("Group|group|common|tMAV|tEN|tMAD", col)) {
+      # score is a type score
+      n <- nt
+    } else if (grepl("condition|Condition|sMAV|sEN|sAD", col)) {
+      # score is a state score
+      n <- ns
+    } else {
+      # skip columns not matching rules
+      next
+    }
+    
+    # convert score into binary predictions
+    scores <- score_df[[col]]
+    cutoff <- sort(scores, decreasing = TRUE)[n]
+    binary_df[[col]] <- scores >= cutoff
+    
+  }
+  
+  # add new selections based on combinations of scores
+  
+  # difference in rank of max absolute group and condition scores
+  max_abs <- c("tMAV", "sMAV")
+  if (all(max_abs %in% colnames(score_df))) {
+    
+    t <- rank(score_df[[max_abs[1]]])
+    s <- rank(score_df[[max_abs[2]]])
+    
+    # type not state
+    scores <- t - s
+    cutoff <- sort(scores, decreasing = TRUE)[nt]
+    binary_df$tMAV_sMAV <- scores >= cutoff
+    
+    # state not type
+    scores <- s - t
+    cutoff <- sort(scores, decreasing = TRUE)[ns]
+    binary_df$sMAV_tMAV <- scores >= cutoff
+    
+  }
+  
+  # difference in rank of Euclidean norm group and condition scores
+  eucl_norm <- c("tEN", "sEN")
+  if (all(eucl_norm %in% colnames(score_df))) {
+    
+    t <- rank(score_df[[eucl_norm[1]]])
+    s <- rank(score_df[[eucl_norm[2]]])
+    
+    # type not state
+    scores <- t - s
+    cutoff <- sort(scores, decreasing = TRUE)[nt]
+    binary_df$tEN_sEN <- scores >= cutoff
+    
+    # state not type
+    scores <- s - t
+    cutoff <- sort(scores, decreasing = TRUE)[ns]
+    binary_df$sEN_tEN <- scores >= cutoff
+    
+  }
+  
+  # difference in rank of absolute difference group and condition scores
+  abs_dif <- c("tMAD", "sAD")
+  if (all(abs_dif %in% colnames(score_df))) {
+    
+    t <- rank(score_df[[abs_dif[1]]])
+    s <- rank(score_df[[abs_dif[2]]])
+    
+    # type not state
+    scores <- t - s
+    cutoff <- sort(scores, decreasing = TRUE)[nt]
+    binary_df$tMAD_sAD <- scores >= cutoff
+    
+    # state not type
+    scores <- s - t
+    cutoff <- sort(scores, decreasing = TRUE)[ns]
+    binary_df$sAD_tMAD <- scores >= cutoff
+    
+  }
+  
+  # difference in rank of common score and condition scores
+  com_con <- c("common_score", "sMAV", "sEN", "sAD")
+  if (all(com_con %in% colnames(score_df)) && !("Group1_score" %in% colnames(score_df))) {
+    
+    t <- rank(score_df[[com_con[1]]])
+    s1 <- rank(score_df[[com_con[2]]])
+    s2 <- rank(score_df[[com_con[3]]])
+    s3 <- rank(score_df[[com_con[4]]])
+    
+    # common - sMAV
+    scores <- t - s1
+    cutoff <- sort(scores, decreasing = TRUE)[nt]
+    binary_df$common_sMAV <- scores >= cutoff
+    
+    # common - sEN
+    scores <- t - s2
+    cutoff <- sort(scores, decreasing = TRUE)[nt]
+    binary_df$common_sEN <- scores >= cutoff
+    
+    # common - sAD
+    scores <- t - s3
+    cutoff <- sort(scores, decreasing = TRUE)[nt]
+    binary_df$common_sAD <- scores >= cutoff
+    
+    # sMAV - common
+    scores <- s1 - t
+    cutoff <- sort(scores, decreasing = TRUE)[ns]
+    binary_df$sMAV_common <- scores >= cutoff
+    
+    # sEN - common
+    scores <- s2 - t
+    cutoff <- sort(scores, decreasing = TRUE)[ns]
+    binary_df$sEN_common <- scores >= cutoff
+    
+    # sAD - common
+    scores <- s3 - t
+    cutoff <- sort(scores, decreasing = TRUE)[ns]
+    binary_df$sAD_common <- scores >= cutoff
+    
+  }
+  
+  # remove selections not needed for downstream analyses
+  if ("Group1_score" %in% colnames(binary_df)) {
+    binary_df <- binary_df %>% 
+      select(
+        -Group1_score,
+        -Group2_score,
+        -Group3_score
+      )
+  }
+  binary_df <- binary_df %>% 
+    select(
+      -Condition1_score,
+      -Condition2_score
+    )
+  
+  return(binary_df)
+  
+})
+
+names(patches_selections) <- names(patches_scores)
+lapply(patches_selections, head)
+```
+
+
+
+## Combine Selections
+
+```{r}
+# combine Patches and FSS selections in one df for each Patches workflow
+all_selections <- lapply(patches_selections, function(df) {
+  
+  if (dim(df)[1] == dim(fss_selections$fss_full)[1]) {
+    # df contains full data
+    
+    new_df <- cbind.data.frame(
+      df,
+      fss_selections$fss_full %>% 
+        select(!gene_id)
+    )
+    
+  } else {
+    # df contains HVG data
+    
+    new_df <- cbind.data.frame(
+      df,
+      fss_selections$fss_hvg %>% 
+        select(!gene_id)
+    )
+    
+  }
+  
+  # add all selection as baseline for downstream analyses
+  new_df$all_genes <- TRUE
+  
+  return(new_df)
+  
+})
+
+lapply(all_selections, head)
+```
+
+
+
+## Export Selections
+
+```{r}
+saveRDS(patches_selections, file = "../../data/sim/03-sel/patches_selections.rds")
+saveRDS(fss_selections, file = "../../data/sim/03-sel/fss_selections.rds")
+saveRDS(all_selections, file = "../../data/sim/03-sel/all_selections.rds")
+```
+
+
+
+## Compare Selections
+
+### Overlaps
+
+```{r}
+plot_overlaps <- function(df, title) {
+  
+  # remove columns and scores not needed
+  df <- df %>% 
+    select(
+      -DEgtDS,
+      -DSgtDE,
+      -DE
+    )
+  
+  # define ground truths as reference columns
+  ref_cols <- c("DEnotDS", "DS", "DSnotDE")
+  
+  # define scores to compare to ground truth
+  score_cols <- setdiff(colnames(df), ref_cols)
+
+  # compute overlaps
+  overlap_df <- expand.grid(Score = score_cols, GroundTruth = ref_cols, stringsAsFactors = FALSE) %>% 
+    rowwise() %>% 
+    mutate(Overlap = sum(df[[Score]] & df[[GroundTruth]])) %>% 
+    ungroup()
+  
+  # order scores for plot
+  overlap_df$Score <- factor(overlap_df$Score, levels = score_cols)
+  
+  # compute number of TRUEs per GroundTruth
+  counts <- colSums(df[ref_cols])
+  overlap_df$GroundTruth <- factor(overlap_df$GroundTruth, 
+                                   levels = ref_cols,
+                                   labels = paste0(ref_cols, " (", counts, ")"))
+  
+  # plot overlap as heat map
+  ggplot(overlap_df, aes(x = Score, y = GroundTruth, fill = Overlap)) +
+    geom_tile(color = "white") +
+    geom_text(aes(label = Overlap), color = "black") +
+    scale_fill_viridis_c(option = "C", direction = -1) +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+    labs(title = title, x = "", y = "")
+  
+}
+```
+
+```{r}
+p1 <- plot_overlaps(
+  bind_cols(
+    fss_selections$fss_full %>% select(-gene_id),
+    patches_selections$patches_clu_con_full %>% select(-gene_id)
+  ),
+  "Full Data - Groups & Conditions"
+)
+p1
+```
+
+```{r}
+p2 <- plot_overlaps(
+  bind_cols(
+    fss_selections$fss_hvg %>% select(-gene_id),
+    patches_selections$patches_clu_con_hvg %>% select(-gene_id)
+  ),
+  "HVG Data - Groups & Conditions"
+)
+p2
+```
+
+```{r}
+p3 <- plot_overlaps(
+  bind_cols(
+    fss_selections$fss_full %>% select(-gene_id),
+    patches_selections$patches_con_full %>% select(-gene_id)
+  ),
+  "Full Data - Conditions"
+)
+p3
+```
+
+```{r}
+p4 <- plot_overlaps(
+  bind_cols(
+    fss_selections$fss_hvg %>% select(-gene_id),
+    patches_selections$patches_con_hvg %>% select(-gene_id)
+  ),
+  "HVG Data - Conditions"
+)
+p4
+```
+
+```{r}
+# combine individual plots
+overlap_plots <- list(p1, p2, p3, p4)
+subtitles <- c(
+  "Full Data - Groups & Conditions",
+  "HVG Data - Groups & Conditions",
+  "Full Data - Conditions",
+  "HVG Data - Conditions"
+)
+overlap_plots <- Map(function(p, sub) p + ggtitle(sub), overlap_plots, subtitles)
+
+overlap_plots <- lapply(overlap_plots, function(p) {
+  p + theme(
+    text = element_text(size = 16),
+    plot.title = element_text(size = 18)
+  )
+})
+
+combined_plot <- wrap_plots(overlap_plots, ncol = 2, guides = "collect") +
+  plot_annotation(
+    title = "Overlap of Selected Genes",
+    theme = theme(
+      legend.position = "none",
+      plot.title = element_text(
+        hjust = 0.5,
+        margin = margin(b = 30),
+        size = 20,
+        face = "bold"
+      )
+    )
+  )
+
+# save and show combined plot
+ggsave("sel_overlap.png", combined_plot, path = "../../outs/sim/",
+       width = 14, height = 9, dpi = 300)
+combined_plot
+```
+
+```{r}
+# combine individual plots
+overlap_plots <- list(p1, p3)
+subtitles <- c(
+  "Groups & Conditions",
+  "Conditions"
+)
+overlap_plots <- Map(function(p, sub) p + ggtitle(sub), overlap_plots, subtitles)
+
+overlap_plots <- lapply(overlap_plots, function(p) {
+  p + theme(
+    text = element_text(size = 16),
+    plot.title = element_text(size = 18)
+  )
+})
+
+combined_plot <- wrap_plots(overlap_plots, ncol = 1, guides = "collect") +
+  plot_annotation(
+    title = "Overlap of Selected Genes",
+    theme = theme(
+      legend.position = "none",
+      plot.title = element_text(
+        hjust = 0.5,
+        margin = margin(b = 30),
+        size = 20,
+        face = "bold"
+      )
+    )
+  )
+
+# save and show combined plot
+ggsave("sel_overlap_full.png", combined_plot, path = "../../outs/sim/",
+       width = 9, height = 8, dpi = 300)
+combined_plot
+```
+
+```{r}
+# combine individual plots
+overlap_plots <- list(p2, p4)
+subtitles <- c(
+  "Groups & Conditions",
+  "Conditions"
+)
+overlap_plots <- Map(function(p, sub) p + ggtitle(sub), overlap_plots, subtitles)
+
+overlap_plots <- lapply(overlap_plots, function(p) {
+  p + theme(
+    text = element_text(size = 16),
+    plot.title = element_text(size = 18)
+  )
+})
+
+combined_plot <- wrap_plots(overlap_plots, ncol = 1, guides = "collect") +
+  plot_annotation(
+    title = "Overlap of Selected Genes",
+    theme = theme(
+      legend.position = "none",
+      plot.title = element_text(
+        hjust = 0.5,
+        margin = margin(b = 30),
+        size = 20,
+        face = "bold"
+      )
+    )
+  )
+
+# save and show combined plot
+ggsave("sel_overlap_hvg.png", combined_plot, path = "../../outs/sim/",
+       width = 9, height = 8, dpi = 300)
+combined_plot
+```
+
+### F1 Scores
+
+```{r}
+# define selections to be used for F1 score calculations
+selections_clu_con <- c(
+  "random",
+  "HVG",
+  "tF",
+  "tF_sPVE",
+  "tF_sPBDS",
+  "tPVE_sPVE",
+  "sPVE_tF",
+  "sPBDS_tF",
+  "sPVE_tPVE",
+  "common_score",
+  "sMAV",
+  "sEN",
+  "sAD",
+  "tMAV",
+  "tEN",
+  "tMAD",
+  "tMAV_sMAV",
+  "sMAV_tMAV",
+  "tEN_sEN",
+  "sEN_tEN",
+  "tMAD_sAD",
+  "sAD_tMAD"
+)
+
+selections_con <- c(
+  "random",
+  "HVG",
+  "tF",
+  "tF_sPVE",
+  "tF_sPBDS",
+  "tPVE_sPVE",
+  "sPVE_tF",
+  "sPBDS_tF",
+  "sPVE_tPVE",
+  "common_score",
+  "sMAV",
+  "sEN",
+  "sAD",
+  "common_sMAV",
+  "common_sEN",
+  "common_sAD",
+  "sMAV_common",
+  "sEN_common",
+  "sAD_common"
+)
+```
+
+```{r}
+f1_scores <- lapply(all_selections, function(df) {
+  
+  # get ground truth
+  y_true_type <- df$DEnotDS
+  y_true_state <- df$DS
+  
+  # determine if df holds group and condition selections or only condition selections
+  if ("tMAV" %in% colnames(df)) {
+    # df contains group and condition selections
+    selections <- selections_clu_con
+  } else {
+    # df contains only condition selections
+    selections <- selections_con
+  }
+  
+  # calculate F1 scores
+  f1_scores <- c()
+  for (selection in selections) {
+
+    if (str_starts(selection, "s")) {
+      # state scores: compare to y_true_state
+      f1_scores <- c(
+        f1_scores,
+        confusionMatrix(
+          factor(y_true_state, levels = c(FALSE, TRUE)),
+          factor(df[[selection]], levels = c(FALSE, TRUE)),
+          positive = "TRUE"
+        )$byClass["F1"]
+      )
+      
+    } else {
+      # type scores: compare to y_true_type
+      f1_scores <- c(
+        f1_scores,
+        confusionMatrix(
+          factor(y_true_type, levels = c(FALSE, TRUE)),
+          factor(df[[selection]], levels = c(FALSE, TRUE)),
+          positive = "TRUE"
+        )$byClass["F1"]
+      )
+      
+    }
+    
+  }
+  
+  results <- data.frame(Selection = selections, F1 = f1_scores)
+  results$Selection <- factor(results$Selection, levels = results$Selection)
+  
+  return(results)
+  
+})
+```
+
+```{r}
+p1 <- bind_cols(
+  f1_scores$patches_clu_con_full,
+  f1_scores$patches_clu_con_hvg %>% select(-Selection)
+) %>% 
+  rename(Full = F1...2, HVG = F1...3) %>% 
+  pivot_longer(cols = c(Full, HVG), names_to = "Data", values_to = "F1") %>% 
+  ggplot(aes(x = reorder(Selection, F1), y = F1, fill = Data)) +
+    geom_col(position = position_dodge(width = 0.8)) +
+    coord_flip() +
+    scale_fill_manual(values = c("steelblue", "darkgrey")) +
+    theme_minimal() +
+    labs(x = "", y = "F1", title = "Groups & Conditions")
+
+p1
+```
+
+```{r}
+p2 <- bind_cols(
+  f1_scores$patches_con_full,
+  f1_scores$patches_con_hvg %>% select(-Selection)
+) %>% 
+  rename(Full = F1...2, HVG = F1...3) %>% 
+  pivot_longer(cols = c(Full, HVG), names_to = "Data", values_to = "F1") %>% 
+  ggplot(aes(x = reorder(Selection, F1), y = F1, fill = Data)) +
+    geom_col(position = position_dodge(width = 0.8)) +
+    coord_flip() +
+    scale_fill_manual(values = c("steelblue", "darkgrey")) +
+    theme_minimal() +
+    labs(x = "", y = "F1", title = "Conditions")
+
+p2
+```
+
+```{r}
+# combine individual plots
+f1_plots <- list(p1, p2)
+
+f1_plots <- lapply(f1_plots, function(p) {
+  p + theme(
+    text = element_text(size = 16),
+    plot.title = element_text(size = 18)
+  )
+})
+
+combined_plot <- wrap_plots(f1_plots, ncol = 2, guides = "collect") +
+  plot_annotation(
+    title = "F1 Score per Selection",
+    theme = theme(
+      plot.title = element_text(
+        hjust = 0.5,
+        margin = margin(b = 30),
+        size = 20,
+        face = "bold"
+      )
+    )
+  )
+
+# save and show combined plot
+ggsave("sel_f1.png", combined_plot, path = "../../outs/sim/",
+       width = 12, height = 5, dpi = 300)
+combined_plot
+```
+
+```{r}
+p3 <- bind_cols(
+  f1_scores$patches_clu_con_full,
+  f1_scores$patches_clu_con_hvg %>% select(-Selection)
+) %>% 
+  rename(Full = F1...2, HVG = F1...3) %>% 
+  pivot_longer(cols = Full, names_to = "Data", values_to = "F1") %>% 
+  ggplot(aes(x = reorder(Selection, F1), y = F1, fill = I("steelblue"))) +
+    geom_col() +
+    coord_flip() +
+    theme_minimal() +
+    labs(x = "", y = "F1", title = "Groups & Conditions")
+
+p3
+```
+
+```{r}
+p4 <- bind_cols(
+  f1_scores$patches_con_full,
+  f1_scores$patches_con_hvg %>% select(-Selection)
+) %>% 
+  rename(Full = F1...2, HVG = F1...3) %>% 
+  pivot_longer(cols = Full, names_to = "Data", values_to = "F1") %>% 
+  ggplot(aes(x = reorder(Selection, F1), y = F1, fill = I("steelblue"))) +
+    geom_col() +
+    coord_flip() +
+    theme_minimal() +
+    labs(x = "", y = "F1", title = "Conditions")
+
+p4
+```
+
+```{r}
+# combine individual plots
+f1_plots <- list(p3, p4)
+
+f1_plots <- lapply(f1_plots, function(p) {
+  p + theme(
+    text = element_text(size = 16),
+    plot.title = element_text(size = 18)
+  )
+})
+
+combined_plot <- wrap_plots(f1_plots, ncol = 2, guides = "collect") +
+  plot_annotation(
+    title = "F1 Score per Selection",
+    theme = theme(
+      plot.title = element_text(
+        hjust = 0.5,
+        margin = margin(b = 30),
+        size = 20,
+        face = "bold"
+      )
+    )
+  )
+
+# save and show combined plot
+ggsave("sel_f1_full.png", combined_plot, path = "../../outs/sim/",
+       width = 12, height = 5, dpi = 300)
+combined_plot
+```
+
+```{r}
+p5 <- bind_cols(
+  f1_scores$patches_clu_con_full,
+  f1_scores$patches_clu_con_hvg %>% select(-Selection)
+) %>% 
+  rename(Full = F1...2, HVG = F1...3) %>% 
+  pivot_longer(cols = HVG, names_to = "Data", values_to = "F1") %>% 
+  ggplot(aes(x = reorder(Selection, F1), y = F1, fill = I("steelblue"))) +
+    geom_col() +
+    coord_flip() +
+    theme_minimal() +
+    labs(x = "", y = "F1", title = "Groups & Conditions")
+
+p5
+```
+
+```{r}
+p6 <- bind_cols(
+  f1_scores$patches_con_full,
+  f1_scores$patches_con_hvg %>% select(-Selection)
+) %>% 
+  rename(Full = F1...2, HVG = F1...3) %>% 
+  pivot_longer(cols = HVG, names_to = "Data", values_to = "F1") %>% 
+  ggplot(aes(x = reorder(Selection, F1), y = F1, fill = I("steelblue"))) +
+    geom_col() +
+    coord_flip() +
+    theme_minimal() +
+    labs(x = "", y = "F1", title = "Conditions")
+
+p6
+```
+
+```{r}
+# combine individual plots
+f1_plots <- list(p5, p6)
+
+f1_plots <- lapply(f1_plots, function(p) {
+  p + theme(
+    text = element_text(size = 16),
+    plot.title = element_text(size = 18)
+  )
+})
+
+combined_plot <- wrap_plots(f1_plots, ncol = 2, guides = "collect") +
+  plot_annotation(
+    title = "F1 Score per Selection",
+    theme = theme(
+      plot.title = element_text(
+        hjust = 0.5,
+        margin = margin(b = 30),
+        size = 20,
+        face = "bold"
+      )
+    )
+  )
+
+# save and show combined plot
+ggsave("sel_f1_hvg.png", combined_plot, path = "../../outs/sim/",
+       width = 12, height = 6, dpi = 300)
+combined_plot
+```
+
+
+
+## Export Selections to Anndata
+
+```{r}
+# read in sce file
+sce_full <- readRDS("../../data/sim/01-pro/t100,s80,b0.rds")
+
+# create HVG sce object
+hvgs <- fss_selections$fss_hvg$gene_id
+sce_hvg <- sce_full[rownames(sce_full) %in% hvgs, ]
+
+# function for adding selection to sce objects
+add_selection_data <- function(sce, selections_list, name) {
+  
+  selection <- selections_list[[name]]
+  if (!all(rownames(sce) == selection$gene_id)) {
+    stop("Gene IDs do not match between SCE and selection table")
+  }
+  
+  rowData(sce) <- cbind(rowData(sce), selection[ , -1])
+  return(sce)
+  
+}
+
+# add selections to sce objects
+sce_clu_con_full <- add_selection_data(sce_full, all_selections, "patches_clu_con_full")
+sce_con_full     <- add_selection_data(sce_full, all_selections, "patches_con_full")
+sce_clu_con_hvg  <- add_selection_data(sce_hvg,  all_selections, "patches_clu_con_hvg")
+sce_con_hvg      <- add_selection_data(sce_hvg,  all_selections, "patches_con_hvg")
+
+# export sce to anndata
+writeH5AD(sce_clu_con_full, "../../data/sim/03-sel/t100,s80,b0-selections_clu_con_full.h5ad")
+writeH5AD(sce_con_full, "../../data/sim/03-sel/t100,s80,b0-selections_con_full.h5ad")
+writeH5AD(sce_clu_con_hvg, "../../data/sim/03-sel/t100,s80,b0-selections_clu_con_hvg.h5ad")
+writeH5AD(sce_con_hvg, "../../data/sim/03-sel/t100,s80,b0-selections_con_hvg.h5ad")
+```
+
+
+
+
+
+
+

@@ -1,0 +1,1519 @@
+---
+title: "Downstream Analyses - Simulation Data"
+author: "Michel Tarnow"
+date: today
+format: 
+    html:
+      toc: true
+      self-contained: true
+      highlight-style: github
+      code-line-numbers: true
+editor_options: 
+    chunk_output_type: inline
+---
+
+## Import Packages
+
+```{r}
+suppressPackageStartupMessages({
+  library(reshape2)
+  library(MLmetrics)
+  library(caret)
+  library(patchwork)
+  library(scran)
+  library(scater)
+  library(igraph)
+  library(SingleCellExperiment)
+  library(MLVSBM)
+  library(tidyverse)
+  library(viridis)
+  library(rlang)
+  library(colorspace)
+  library(lisi)
+  library(ggrepel)
+})
+```
+
+
+
+## Import Selections
+
+```{r}
+patches_selections <- readRDS("../../data/sim/03-sel/patches_selections.rds")
+fss_selections <- readRDS("../../data/sim/03-sel/fss_selections.rds")
+all_selections <- readRDS("../../data/sim/03-sel/all_selections.rds")
+```
+
+
+
+## Load SingleCellExperiment
+
+```{r}
+# full data
+sce_full <- readRDS("../../data/sim/01-pro/t100,s80,b0.rds")
+
+# HVG data
+hvgs <- fss_selections$fss_hvg$gene_id
+sce_hvg <- sce_full[rownames(sce_full) %in% hvgs, ]
+```
+
+
+
+## UMAPs
+
+```{r}
+cbf_palette = c(
+    "#E69F00",  # Orange
+    "#56B4E9",  # Sky Blue
+    "#009E73",  # Bluish Green
+    "#F0E442",  # Yellow
+    "#0072B2",  # Blue
+    "#D55E00",  # Vermillion
+    "#CC79A7",  # Reddish Purple
+    "#999999",  # Gray
+    "#117733",  # Dark Green
+    "#882255",  # Wine
+    "#44AA99",  # Teal
+    "#DDCC77",  # Sand
+    "#88CCEE",  # Light Blue
+    "#AA4499",  # Magenta
+    "#332288",  # Navy
+    "#E17C05",  # Burnt Orange
+    "#DC267F",  # Pink
+    "#648FFF",  # Vivid Blue
+    "#785EF0",  # Violet
+    "#FE6100"   # Bright Orange
+)
+```
+
+```{r}
+# define selections to be used for UMAPs
+selections_clu_con <- c(
+  "random",
+  "HVG",
+  "tF",
+  "tF_sPVE",
+  "tF_sPBDS",
+  "tPVE_sPVE",
+  "sPVE_tF",
+  "sPBDS_tF",
+  "sPVE_tPVE",
+  "common_score",
+  "tMAV",
+  "tEN",
+  "tMAD",
+  "tMAV_sMAV",
+  "tEN_sEN",
+  "tMAD_sAD",
+  "sMAV",
+  "sEN",
+  "sAD",
+  "sMAV_tMAV",
+  "sEN_tEN",
+  "sAD_tMAD",
+  "all_genes"
+)
+
+selections_con <- c(
+  "common_score",
+  "sMAV",
+  "sEN",
+  "sAD",
+  "common_sMAV",
+  "common_sEN",
+  "common_sAD",
+  "sMAV_common",
+  "sEN_common",
+  "sAD_common"
+)
+```
+
+```{r}
+umap_plots <- lapply(all_selections, function(df) {
+  
+  # determine if df holds group and condition selections or only condition selections
+  if ("tMAV" %in% colnames(df)) {
+    # df contains group and condition selections
+    selections <- selections_clu_con
+  } else {
+    # df contains only condition selections
+    selections <- selections_con
+  }
+  
+  # determine if df contains full or HVG data
+  if (dim(df)[1] == dim(sce_full)[1]) {
+    # df contains full data
+    sce_iter <- sce_full
+  } else {
+    # df contains HVG data
+    sce_iter <- sce_hvg
+  }
+  
+  # create UMAP plots
+  plots <- c()
+  for (selection in selections) {
+    
+    # set seed
+    set.seed(42)
+    
+    # dimensionality reduction
+    sce_iter <- runPCA(sce_iter, subset_row=df[[selection]])
+    sce_iter <- runUMAP(sce_iter, dimred="PCA")
+
+    # create UMAP plot colored by condition
+    plot1 <- ggplot(
+      data = as.data.frame(reducedDim(sce_iter, "UMAP")),
+      mapping = aes(x = UMAP1, y = UMAP2, colour = sce_iter$group_id)
+    ) +
+      geom_point(size = 1, alpha = 0.7) +
+      scale_colour_manual(values = cbf_palette[1:2]) +
+      labs(title = "",
+           x = "UMAP1",
+           y = "UMAP2",
+           colour = "Condition") +
+      theme_classic() +
+      theme(
+        axis.ticks = element_blank(),
+        axis.text = element_blank(),
+        legend.position = "none",
+        text = element_text(size = 16),
+        plot.title = element_text(
+            hjust = 0.5,
+            size = 20,
+            face = "bold"
+          )
+      )
+    
+    # create UMAP plot colored by group
+    plot2 <- ggplot(
+      data = as.data.frame(reducedDim(sce_iter, "UMAP")),
+      mapping = aes(x = UMAP1, y = UMAP2, colour = sce_iter$cluster_id)
+    ) +
+      geom_point(size = 1, alpha = 0.7) +
+      scale_colour_manual(values = cbf_palette[c(3, 5, 7)]) +
+      labs(title = selection,
+           x = "",
+           y = "UMAP2",
+           colour = "Group") +
+      theme_classic() +
+      theme(
+        axis.ticks = element_blank(),
+        axis.text = element_blank(),
+        legend.position = "none",
+        text = element_text(size = 16),
+        plot.title = element_text(
+            hjust = 0.5,
+            size = 20,
+            face = "bold"
+          )
+      )
+    
+    plots <- c(
+      plots,
+      plot1,
+      plot2
+    )
+    
+  }
+  
+  return(plots)
+  
+})
+```
+
+```{r}
+umap_plots$patches_clu_con_full
+```
+
+```{r}
+for (i in 1:length(umap_plots$patches_clu_con_full)) {
+  file_name <- paste0("umap_", i, ".png")
+  
+  ggsave(file_name, umap_plots$patches_clu_con_full[i], path = "../../outs/sim/umap_clu_con_full/",
+         width = 4, height = 4, dpi = 300)
+}
+```
+
+```{r}
+umap_plots$patches_clu_con_hvg
+```
+
+```{r}
+for (i in 1:length(umap_plots$patches_clu_con_hvg)) {
+  file_name <- paste0("umap_", i, ".png")
+  
+  ggsave(file_name, umap_plots$patches_clu_con_hvg[i], path = "../../outs/sim/umap_clu_con_hvg/",
+         width = 4, height = 4, dpi = 300)
+}
+```
+
+```{r}
+umap_plots$patches_con_full
+```
+
+```{r}
+for (i in 1:length(umap_plots$patches_con_full)) {
+  file_name <- paste0("umap_", i, ".png")
+  
+  ggsave(file_name, umap_plots$patches_con_full[i], path = "../../outs/sim/umap_con_full/",
+         width = 4, height = 4, dpi = 300)
+}
+```
+
+```{r}
+umap_plots$patches_con_hvg
+```
+
+```{r}
+for (i in 1:length(umap_plots$patches_con_hvg)) {
+  file_name <- paste0("umap_", i, ".png")
+  
+  ggsave(file_name, umap_plots$patches_con_hvg[i], path = "../../outs/sim/umap_con_hvg/",
+         width = 4, height = 4, dpi = 300)
+}
+```
+
+
+
+## ARI
+
+```{r}
+# define selections to be used for clustering
+selections_clu_con <- c(
+  "all_genes",
+  "random",
+  "HVG",
+  "tF_sPVE",
+  "tF_sPBDS",
+  "tPVE_sPVE",
+  "sPVE_tF",
+  "sPBDS_tF",
+  "sPVE_tPVE",
+  "tMAV_sMAV",
+  "tEN_sEN",
+  "tMAD_sAD",
+  "sMAV_tMAV",
+  "sEN_tEN",
+  "sAD_tMAD"
+)
+
+selections_con <- c(
+  "all_genes",
+  "random",
+  "HVG",
+  "tF_sPVE",
+  "tF_sPBDS",
+  "tPVE_sPVE",
+  "sPVE_tF",
+  "sPBDS_tF",
+  "sPVE_tPVE",
+  "common_sMAV",
+  "common_sEN",
+  "common_sAD",
+  "sMAV_common",
+  "sEN_common",
+  "sAD_common"
+)
+
+all_sels <- unique(c(selections_clu_con, selections_con))
+color_map <- setNames(qualitative_hcl(21, palette = "Dark 3"), all_sels)
+```
+
+```{r}
+ari_scores <- lapply(all_selections, function(df) {
+  
+  # determine if df holds group and condition selections or only condition selections
+  if ("tMAV" %in% colnames(df)) {
+    # df contains group and condition selections
+    selections <- selections_clu_con
+  } else {
+    # df contains only condition selections
+    selections <- selections_con
+  }
+  
+  # determine if df contains full or HVG data
+  if (dim(df)[1] == dim(sce_full)[1]) {
+    # df contains full data
+    sce_iter <- sce_full
+  } else {
+    # df contains HVG data
+    sce_iter <- sce_hvg
+  }
+  
+  # calculate ARI scores
+  ari_scores <- c()
+  for (selection in selections) {
+    
+    # set seed
+    set.seed(42)
+    
+    # dimensionality reduction and clustering
+    sce_iter <- runPCA(sce_iter, subset_row=df[[selection]])
+    g <- buildSNNGraph(sce_iter, use.dimred="PCA", type="jaccard")
+    k <- cluster_louvain(g, resolution=1)$membership
+    n_clusters <- length(unique(k))
+    message(selection, ": ", n_clusters, " clusters")
+    new_col <- paste0("cluster_re_", selection)
+    sce_iter[[new_col]] <- factor(k, seq_along(unique(k)))
+    
+    # ARI score calculation
+    ari_scores <- c(
+      ari_scores,
+      ARI(sce_iter$cluster_id, sce_iter[[new_col]])
+    )
+    
+  }
+  
+  results <- data.frame(Selection = selections, ARI = ari_scores)
+  results$Selection <- factor(results$Selection, levels = results$Selection)
+  
+  return(results)
+  
+})
+```
+
+```{r}
+p1 <- bind_cols(
+  ari_scores$patches_clu_con_full,
+  ari_scores$patches_clu_con_hvg %>% select(-Selection)
+) %>% 
+  rename(Full = ARI...2, HVG = ARI...3) %>% 
+  pivot_longer(cols = c(Full, HVG), names_to = "Data", values_to = "ARI") %>% 
+  ggplot(aes(x = reorder(Selection, ARI), y = ARI, fill = Data)) +
+    geom_col(position = position_dodge(width = 0.8)) +
+    coord_flip() +
+    scale_fill_manual(values = c("steelblue", "darkgrey")) +
+    theme_minimal() +
+    labs(x = "", y = "ARI", title = "Groups & Conditions")
+
+p1
+```
+
+```{r}
+p2 <- bind_cols(
+  ari_scores$patches_con_full,
+  ari_scores$patches_con_hvg %>% select(-Selection)
+) %>% 
+  rename(Full = ARI...2, HVG = ARI...3) %>% 
+  pivot_longer(cols = c(Full, HVG), names_to = "Data", values_to = "ARI") %>% 
+  ggplot(aes(x = reorder(Selection, ARI), y = ARI, fill = Data)) +
+    geom_col(position = position_dodge(width = 0.8)) +
+    coord_flip() +
+    scale_fill_manual(values = c("steelblue", "darkgrey")) +
+    theme_minimal() +
+    labs(x = "", y = "ARI", title = "Conditions")
+
+p2
+```
+
+```{r}
+# combine individual plots
+ari_plots <- list(p1, p2)
+
+ari_plots <- lapply(ari_plots, function(p) {
+  p + theme(
+    text = element_text(size = 16),
+    plot.title = element_text(size = 18)
+  )
+})
+
+combined_plot <- wrap_plots(ari_plots, ncol = 2, guides = "collect") +
+  plot_annotation(
+    title = "ARI Score per Selection",
+    theme = theme(
+      plot.title = element_text(
+        hjust = 0.5,
+        margin = margin(b = 30),
+        size = 20,
+        face = "bold"
+      )
+    )
+  )
+
+# save and show combined plot
+ggsave("da_ari.png", combined_plot, path = "../../outs/sim/",
+       width = 12, height = 5, dpi = 300)
+combined_plot
+```
+
+```{r}
+p3 <- ari_scores$patches_clu_con_full %>% 
+  ggplot(aes(x = reorder(Selection, ARI), y = ARI, fill = Selection)) +
+    geom_col() +
+    coord_flip() +
+    theme_minimal() +
+    theme(legend.position = "none") +
+    scale_fill_manual(values = color_map) +
+    labs(x = "", y = "ARI", title = "Groups & Conditions")
+
+p3
+```
+
+```{r}
+p4 <- ari_scores$patches_con_full %>% 
+  ggplot(aes(x = reorder(Selection, ARI), y = ARI, fill = Selection)) +
+    geom_col() +
+    coord_flip() +
+    theme_minimal() +
+    theme(legend.position = "none") +
+    scale_fill_manual(values = color_map) +
+    labs(x = "", y = "ARI", title = "Conditions")
+
+p4
+```
+
+```{r}
+# combine individual plots
+ari_plots <- list(p3, p4)
+
+ari_plots <- lapply(ari_plots, function(p) {
+  p + theme(
+    text = element_text(size = 16),
+    plot.title = element_text(size = 18)
+  )
+})
+
+combined_plot <- wrap_plots(ari_plots, ncol = 2, guides = "collect") +
+  plot_annotation(
+    title = "ARI Score per Selection",
+    theme = theme(
+      plot.title = element_text(
+        hjust = 0.5,
+        margin = margin(b = 30),
+        size = 20,
+        face = "bold"
+      )
+    )
+  )
+
+# save and show combined plot
+ggsave("da_ari_full.png", combined_plot, path = "../../outs/sim/",
+       width = 12, height = 5, dpi = 300)
+combined_plot
+```
+
+```{r}
+p5 <- ari_scores$patches_clu_con_hvg %>% 
+  ggplot(aes(x = reorder(Selection, ARI), y = ARI, fill = Selection)) +
+    geom_col() +
+    coord_flip() +
+    theme_minimal() +
+    theme(legend.position = "none") +
+    scale_fill_manual(values = color_map) +
+    labs(x = "", y = "ARI", title = "Groups & Conditions")
+
+p5
+```
+
+```{r}
+p6 <- ari_scores$patches_con_hvg %>% 
+  ggplot(aes(x = reorder(Selection, ARI), y = ARI, fill = Selection)) +
+    geom_col() +
+    coord_flip() +
+    theme_minimal() +
+    theme(legend.position = "none") +
+    scale_fill_manual(values = color_map) +
+    labs(x = "", y = "ARI", title = "Conditions")
+
+p6
+```
+
+```{r}
+# combine individual plots
+ari_plots <- list(p5, p6)
+
+ari_plots <- lapply(ari_plots, function(p) {
+  p + theme(
+    text = element_text(size = 16),
+    plot.title = element_text(size = 18)
+  )
+})
+
+combined_plot <- wrap_plots(ari_plots, ncol = 2, guides = "collect") +
+  plot_annotation(
+    title = "ARI Score per Selection",
+    theme = theme(
+      plot.title = element_text(
+        hjust = 0.5,
+        margin = margin(b = 30),
+        size = 20,
+        face = "bold"
+      )
+    )
+  )
+
+# save and show combined plot
+ggsave("da_ari_hvg.png", combined_plot, path = "../../outs/sim/",
+       width = 12, height = 6, dpi = 300)
+combined_plot
+```
+
+
+
+## LISI
+
+```{r}
+# define selections to be used for clustering
+selections_clu_con <- c(
+  "all_genes",
+  "random",
+  "HVG",
+  "tF_sPVE",
+  "tF_sPBDS",
+  "tPVE_sPVE",
+  "sPVE_tF",
+  "sPBDS_tF",
+  "sPVE_tPVE",
+  "tMAV_sMAV",
+  "tEN_sEN",
+  "tMAD_sAD",
+  "sMAV_tMAV",
+  "sEN_tEN",
+  "sAD_tMAD"
+)
+
+selections_con <- c(
+  "all_genes",
+  "random",
+  "HVG",
+  "tF_sPVE",
+  "tF_sPBDS",
+  "tPVE_sPVE",
+  "sPVE_tF",
+  "sPBDS_tF",
+  "sPVE_tPVE",
+  "common_sMAV",
+  "common_sEN",
+  "common_sAD",
+  "sMAV_common",
+  "sEN_common",
+  "sAD_common"
+)
+
+all_sels <- unique(c(selections_clu_con, selections_con))
+color_map <- setNames(qualitative_hcl(21, palette = "Dark 3"), all_sels)
+```
+
+```{r}
+lisi_scores <- lapply(all_selections, function(df) {
+  
+  # determine if df holds group and condition selections or only condition selections
+  if ("tMAV" %in% colnames(df)) {
+    # df contains group and condition selections
+    selections <- selections_clu_con
+  } else {
+    # df contains only condition selections
+    selections <- selections_con
+  }
+  
+  # determine if df contains full or HVG data
+  if (dim(df)[1] == dim(sce_full)[1]) {
+    # df contains full data
+    sce_iter <- sce_full
+  } else {
+    # df contains HVG data
+    sce_iter <- sce_hvg
+  }
+  
+  # calculate LISI scores
+  lisi_scores <- list()
+  for (selection in selections) {
+    
+    # set seed
+    set.seed(42)
+    
+    # dimensionality reduction and data extraction
+    sce_iter <- runPCA(sce_iter, subset_row=df[[selection]])
+    y <- reducedDim(sce_iter, "PCA")
+    cd <- colData(sce_iter)
+    by <- c(
+      LISI_c="group_id",
+      LISI_g="cluster_id"
+    )
+    
+    # LISI score calculation
+    res <- sapply(by, \(.) {
+        res <- compute_lisi(y, cd, .)
+        n <- length(unique(cd[[.]]))
+        (mean(res[[1]])-1)/(n-1)
+    })
+    
+    lisi_scores[[selection]] <- data.frame(
+      Selection = selection,
+      LISI_g = unname(res["LISI_g"]),
+      LISI_c = unname(res["LISI_c"])
+    )
+    
+  }
+  
+  results <- do.call(rbind, lisi_scores)
+  results$Selection <- factor(results$Selection, levels = results$Selection)
+  return(results)
+  
+})
+```
+
+```{r}
+p1 <- lisi_scores$patches_clu_con_full %>% 
+  ggplot(aes(x = reorder(Selection, LISI_g), y = LISI_g, fill = Selection)) +
+    geom_col() +
+    coord_flip() +
+    theme_minimal() +
+    theme(legend.position = "none") +
+    scale_fill_manual(values = color_map) +
+    labs(x = "", y = "LISI_g", title = "Groups & Conditions (Group Mixing)")
+
+p1
+```
+
+```{r}
+p2 <- lisi_scores$patches_clu_con_full %>% 
+  ggplot(aes(x = reorder(Selection, LISI_c), y = LISI_c, fill = Selection)) +
+    geom_col() +
+    coord_flip() +
+    theme_minimal() +
+    theme(legend.position = "none") +
+    scale_fill_manual(values = color_map) +
+    labs(x = "", y = "LISI_c", title = "Groups & Conditions (Condition Mixing)")
+
+p2
+```
+
+```{r}
+p3 <- lisi_scores$patches_con_full %>% 
+  ggplot(aes(x = reorder(Selection, LISI_g), y = LISI_g, fill = Selection)) +
+    geom_col() +
+    coord_flip() +
+    theme_minimal() +
+    theme(legend.position = "none") +
+    scale_fill_manual(values = color_map) +
+    labs(x = "", y = "LISI_g", title = "Conditions (Group Mixing)")
+
+p3
+```
+
+```{r}
+p4 <- lisi_scores$patches_con_full %>% 
+  ggplot(aes(x = reorder(Selection, LISI_c), y = LISI_c, fill = Selection)) +
+    geom_col() +
+    coord_flip() +
+    theme_minimal() +
+    theme(legend.position = "none") +
+    scale_fill_manual(values = color_map) +
+    labs(x = "", y = "LISI_c", title = "Conditions (Condition Mixing)")
+
+p4
+```
+
+```{r}
+# combine individual plots
+lisi_plots <- list(p1, p3, p2, p4)
+
+lisi_plots <- lapply(lisi_plots, function(p) {
+  p + theme(
+    text = element_text(size = 16),
+    plot.title = element_text(size = 18)
+  )
+})
+
+combined_plot <- wrap_plots(lisi_plots, ncol = 2, guides = "collect") +
+  plot_annotation(
+    title = "LISI Scores per Selection",
+    theme = theme(
+      plot.title = element_text(
+        hjust = 0.5,
+        margin = margin(b = 30),
+        size = 20,
+        face = "bold"
+      )
+    )
+  )
+
+# save and show combined plot
+ggsave("da_lisi_full.png", combined_plot, path = "../../outs/sim/",
+       width = 12, height = 10, dpi = 300)
+combined_plot
+```
+
+```{r}
+p1 <- lisi_scores$patches_clu_con_hvg %>% 
+  ggplot(aes(x = reorder(Selection, LISI_g), y = LISI_g, fill = Selection)) +
+    geom_col() +
+    coord_flip() +
+    theme_minimal() +
+    theme(legend.position = "none") +
+    scale_fill_manual(values = color_map) +
+    labs(x = "", y = "LISI_g", title = "Groups & Conditions (Group Mixing)")
+
+p1
+```
+
+```{r}
+p2 <- lisi_scores$patches_clu_con_hvg %>% 
+  ggplot(aes(x = reorder(Selection, LISI_c), y = LISI_c, fill = Selection)) +
+    geom_col() +
+    coord_flip() +
+    theme_minimal() +
+    theme(legend.position = "none") +
+    scale_fill_manual(values = color_map) +
+    labs(x = "", y = "LISI_c", title = "Groups & Conditions (Condition Mixing)")
+
+p2
+```
+
+```{r}
+p3 <- lisi_scores$patches_con_hvg %>% 
+  ggplot(aes(x = reorder(Selection, LISI_g), y = LISI_g, fill = Selection)) +
+    geom_col() +
+    coord_flip() +
+    theme_minimal() +
+    theme(legend.position = "none") +
+    scale_fill_manual(values = color_map) +
+    labs(x = "", y = "LISI_g", title = "Conditions (Group Mixing)")
+
+p3
+```
+
+```{r}
+p4 <- lisi_scores$patches_con_hvg %>% 
+  ggplot(aes(x = reorder(Selection, LISI_c), y = LISI_c, fill = Selection)) +
+    geom_col() +
+    coord_flip() +
+    theme_minimal() +
+    theme(legend.position = "none") +
+    scale_fill_manual(values = color_map) +
+    labs(x = "", y = "LISI_c", title = "Conditions (Condition Mixing)")
+
+p4
+```
+
+```{r}
+# combine individual plots
+lisi_plots <- list(p1, p3, p2, p4)
+
+lisi_plots <- lapply(lisi_plots, function(p) {
+  p + theme(
+    text = element_text(size = 16),
+    plot.title = element_text(size = 18)
+  )
+})
+
+combined_plot <- wrap_plots(lisi_plots, ncol = 2, guides = "collect") +
+  plot_annotation(
+    title = "LISI Scores per Selection",
+    theme = theme(
+      plot.title = element_text(
+        hjust = 0.5,
+        margin = margin(b = 30),
+        size = 20,
+        face = "bold"
+      )
+    )
+  )
+
+# save and show combined plot
+ggsave("da_lisi_hvg.png", combined_plot, path = "../../outs/sim/",
+       width = 12, height = 10, dpi = 300)
+combined_plot
+```
+
+```{r}
+p1 <- lisi_scores$patches_clu_con_full %>% 
+  ggplot(aes(x = LISI_g, y = LISI_c, color = Selection, label = Selection)) +
+    geom_point(size = 3) +
+    geom_text_repel(size = 5, show.legend = FALSE) + 
+    theme_minimal() +
+    theme(legend.position = "none") +
+    scale_color_manual(values = color_map) +
+    labs(x = "LISI_g", y = "LISI_c", title = "Groups & Conditions")
+
+p1
+```
+
+```{r}
+p2 <- lisi_scores$patches_con_full %>% 
+  ggplot(aes(x = LISI_g, y = LISI_c, color = Selection, label = Selection)) +
+    geom_point(size = 3) +
+    geom_text_repel(size = 5, show.legend = FALSE) + 
+    theme_minimal() +
+    theme(legend.position = "none") +
+    scale_color_manual(values = color_map) +
+    labs(x = "LISI_g", y = "LISI_c", title = "Conditions")
+
+p2
+```
+
+```{r}
+# combine individual plots
+lisi_plots <- list(p1, p2)
+
+lisi_plots <- lapply(lisi_plots, function(p) {
+  p + theme(
+    text = element_text(size = 16),
+    plot.title = element_text(size = 18)
+  )
+})
+
+combined_plot <- wrap_plots(lisi_plots, ncol = 2, guides = "collect") +
+  plot_annotation(
+    title = "LISI Scores per Selection",
+    theme = theme(
+      plot.title = element_text(
+        hjust = 0.5,
+        margin = margin(b = 30),
+        size = 20,
+        face = "bold"
+      )
+    )
+  )
+
+# save and show combined plot
+ggsave("da_lisi2_full.png", combined_plot, path = "../../outs/sim/",
+       width = 12, height = 6, dpi = 300)
+combined_plot
+```
+
+```{r}
+p1 <- lisi_scores$patches_clu_con_hvg %>% 
+  ggplot(aes(x = LISI_g, y = LISI_c, color = Selection, label = Selection)) +
+    geom_point(size = 3) +
+    geom_text_repel(size = 5, show.legend = FALSE) + 
+    theme_minimal() +
+    theme(legend.position = "none") +
+    scale_color_manual(values = color_map) +
+    labs(x = "LISI_g", y = "LISI_c", title = "Groups & Conditions")
+
+p1
+```
+
+```{r}
+p2 <- lisi_scores$patches_con_hvg %>% 
+  ggplot(aes(x = LISI_g, y = LISI_c, color = Selection, label = Selection)) +
+    geom_point(size = 3) +
+    geom_text_repel(size = 5, show.legend = FALSE) + 
+    theme_minimal() +
+    theme(legend.position = "none") +
+    scale_color_manual(values = color_map) +
+    labs(x = "LISI_g", y = "LISI_c", title = "Conditions")
+
+p2
+```
+
+```{r}
+# combine individual plots
+lisi_plots <- list(p1, p2)
+
+lisi_plots <- lapply(lisi_plots, function(p) {
+  p + theme(
+    text = element_text(size = 16),
+    plot.title = element_text(size = 18)
+  )
+})
+
+combined_plot <- wrap_plots(lisi_plots, ncol = 2, guides = "collect") +
+  plot_annotation(
+    title = "LISI Scores per Selection",
+    theme = theme(
+      plot.title = element_text(
+        hjust = 0.5,
+        margin = margin(b = 30),
+        size = 20,
+        face = "bold"
+      )
+    )
+  )
+
+# save and show combined plot
+ggsave("da_lisi2_hvg.png", combined_plot, path = "../../outs/sim/",
+       width = 12, height = 6, dpi = 300)
+combined_plot
+```
+
+
+
+## PCR
+
+```{r}
+# define selections to be used
+selections_clu_con <- c(
+  "all_genes",
+  "random",
+  "HVG",
+  "tF_sPVE",
+  "tF_sPBDS",
+  "tPVE_sPVE",
+  "sPVE_tF",
+  "sPBDS_tF",
+  "sPVE_tPVE",
+  "tMAV_sMAV",
+  "tEN_sEN",
+  "tMAD_sAD",
+  "sMAV_tMAV",
+  "sEN_tEN",
+  "sAD_tMAD"
+)
+
+selections_con <- c(
+  "all_genes",
+  "random",
+  "HVG",
+  "tF_sPVE",
+  "tF_sPBDS",
+  "tPVE_sPVE",
+  "sPVE_tF",
+  "sPBDS_tF",
+  "sPVE_tPVE",
+  "common_sMAV",
+  "common_sEN",
+  "common_sAD",
+  "sMAV_common",
+  "sEN_common",
+  "sAD_common"
+)
+
+all_sels <- unique(c(selections_clu_con, selections_con))
+color_map <- setNames(qualitative_hcl(21, palette = "Dark 3"), all_sels)
+```
+
+```{r}
+f <- function(x, id) {
+  # regress PCs on 'id's
+  y <- reducedDim(x, "PCA")
+  ve <- attr(y, "varExplained")
+  fit <- summary(lm(y~x[[id]]))
+  # sum across coefficients of determination weighted
+  # by variance explained & scale by total variance
+  r2 <- vapply(fit, \(.) .$adj.r.squared, numeric(1))
+  r2 <- r2[i <- r2 > 0]; ve <- ve[i]
+  sum(ve*r2)/sum(ve)
+}
+
+pcr_scores <- lapply(all_selections, function(df) {
+  
+  # determine if df holds group and condition selections or only condition selections
+  if ("tMAV" %in% colnames(df)) {
+    # df contains group and condition selections
+    selections <- selections_clu_con
+  } else {
+    # df contains only condition selections
+    selections <- selections_con
+  }
+  
+  # determine if df contains full or HVG data
+  if (dim(df)[1] == dim(sce_full)[1]) {
+    # df contains full data
+    sce_iter <- sce_full
+  } else {
+    # df contains HVG data
+    sce_iter <- sce_hvg
+  }
+  
+  # calculate PCR scores
+  pcr_scores <- list()
+  for (selection in selections) {
+    
+    # set seed
+    set.seed(42)
+    
+    # dimensionality reduction and data extraction
+    sce_iter <- runPCA(sce_iter, subset_row=df[[selection]])
+    ids <- c(
+      PCR_g="cluster_id",
+      PCR_c="group_id"
+    )
+    
+    # PCR score calculation
+    res <- sapply(names(ids), \(sta) f(sce_iter, ids[sta]))
+    
+    pcr_scores[[selection]] <- data.frame(
+      Selection = selection,
+      PCR_g = unname(res["PCR_g"]),
+      PCR_c = unname(res["PCR_c"])
+    )
+    
+  }
+  
+  results <- do.call(rbind, pcr_scores)
+  results$Selection <- factor(results$Selection, levels = results$Selection)
+  return(results)
+  
+})
+```
+
+```{r}
+p1 <- pcr_scores$patches_clu_con_full %>% 
+  ggplot(aes(x = reorder(Selection, PCR_g), y = PCR_g, fill = Selection)) +
+    geom_col() +
+    coord_flip() +
+    theme_minimal() +
+    theme(legend.position = "none") +
+    scale_fill_manual(values = color_map) +
+    labs(x = "", y = "PCR_g", title = "Groups & Conditions (Group Variance)")
+
+p1
+```
+
+```{r}
+p2 <- pcr_scores$patches_clu_con_full %>% 
+  ggplot(aes(x = reorder(Selection, PCR_c), y = PCR_c, fill = Selection)) +
+    geom_col() +
+    coord_flip() +
+    theme_minimal() +
+    theme(legend.position = "none") +
+    scale_fill_manual(values = color_map) +
+    labs(x = "", y = "PCR_c", title = "Groups & Conditions (Condition Variance)")
+
+p2
+```
+
+```{r}
+p3 <- pcr_scores$patches_con_full %>% 
+  ggplot(aes(x = reorder(Selection, PCR_g), y = PCR_g, fill = Selection)) +
+    geom_col() +
+    coord_flip() +
+    theme_minimal() +
+    theme(legend.position = "none") +
+    scale_fill_manual(values = color_map) +
+    labs(x = "", y = "PCR_g", title = "Conditions (Group Variance)")
+
+p3
+```
+
+```{r}
+p4 <- pcr_scores$patches_con_full %>% 
+  ggplot(aes(x = reorder(Selection, PCR_c), y = PCR_c, fill = Selection)) +
+    geom_col() +
+    coord_flip() +
+    theme_minimal() +
+    theme(legend.position = "none") +
+    scale_fill_manual(values = color_map) +
+    labs(x = "", y = "PCR_c", title = "Conditions (Condition Variance)")
+
+p4
+```
+
+```{r}
+# combine individual plots
+pcr_plots <- list(p1, p3, p2, p4)
+
+pcr_plots <- lapply(pcr_plots, function(p) {
+  p + theme(
+    text = element_text(size = 16),
+    plot.title = element_text(size = 18)
+  )
+})
+
+combined_plot <- wrap_plots(pcr_plots, ncol = 2, guides = "collect") +
+  plot_annotation(
+    title = "PCR Scores per Selection",
+    theme = theme(
+      plot.title = element_text(
+        hjust = 0.5,
+        margin = margin(b = 30),
+        size = 20,
+        face = "bold"
+      )
+    )
+  )
+
+# save and show combined plot
+ggsave("da_pcr_full.png", combined_plot, path = "../../outs/sim/",
+       width = 12, height = 10, dpi = 300)
+combined_plot
+```
+
+```{r}
+p1 <- pcr_scores$patches_clu_con_hvg %>% 
+  ggplot(aes(x = reorder(Selection, PCR_g), y = PCR_g, fill = Selection)) +
+    geom_col() +
+    coord_flip() +
+    theme_minimal() +
+    theme(legend.position = "none") +
+    scale_fill_manual(values = color_map) +
+    labs(x = "", y = "PCR_g", title = "Groups & Conditions (Group Variance)")
+
+p1
+```
+
+```{r}
+p2 <- pcr_scores$patches_clu_con_hvg %>% 
+  ggplot(aes(x = reorder(Selection, PCR_c), y = PCR_c, fill = Selection)) +
+    geom_col() +
+    coord_flip() +
+    theme_minimal() +
+    theme(legend.position = "none") +
+    scale_fill_manual(values = color_map) +
+    labs(x = "", y = "PCR_c", title = "Groups & Conditions (Condition Variance)")
+
+p2
+```
+
+```{r}
+p3 <- pcr_scores$patches_con_hvg %>% 
+  ggplot(aes(x = reorder(Selection, PCR_g), y = PCR_g, fill = Selection)) +
+    geom_col() +
+    coord_flip() +
+    theme_minimal() +
+    theme(legend.position = "none") +
+    scale_fill_manual(values = color_map) +
+    labs(x = "", y = "PCR_g", title = "Conditions (Group Variance)")
+
+p3
+```
+
+```{r}
+p4 <- pcr_scores$patches_con_hvg %>% 
+  ggplot(aes(x = reorder(Selection, PCR_c), y = PCR_c, fill = Selection)) +
+    geom_col() +
+    coord_flip() +
+    theme_minimal() +
+    theme(legend.position = "none") +
+    scale_fill_manual(values = color_map) +
+    labs(x = "", y = "PCR_c", title = "Conditions (Condition Variance)")
+
+p4
+```
+
+```{r}
+# combine individual plots
+pcr_plots <- list(p1, p3, p2, p4)
+
+pcr_plots <- lapply(pcr_plots, function(p) {
+  p + theme(
+    text = element_text(size = 16),
+    plot.title = element_text(size = 18)
+  )
+})
+
+combined_plot <- wrap_plots(pcr_plots, ncol = 2, guides = "collect") +
+  plot_annotation(
+    title = "PCR Scores per Selection",
+    theme = theme(
+      plot.title = element_text(
+        hjust = 0.5,
+        margin = margin(b = 30),
+        size = 20,
+        face = "bold"
+      )
+    )
+  )
+
+# save and show combined plot
+ggsave("da_pcr_hvg.png", combined_plot, path = "../../outs/sim/",
+       width = 12, height = 10, dpi = 300)
+combined_plot
+```
+
+```{r}
+p1 <- pcr_scores$patches_clu_con_full %>% 
+  ggplot(aes(x = PCR_g, y = PCR_c, color = Selection, label = Selection)) +
+    geom_point(size = 3) +
+    geom_text_repel(size = 5, show.legend = FALSE) + 
+    theme_minimal() +
+    theme(legend.position = "none") +
+    scale_color_manual(values = color_map) +
+    labs(x = "PCR_g", y = "PCR_c", title = "Groups & Conditions")
+
+p1
+```
+
+```{r}
+p2 <- pcr_scores$patches_con_full %>% 
+  ggplot(aes(x = PCR_g, y = PCR_c, color = Selection, label = Selection)) +
+    geom_point(size = 3) +
+    geom_text_repel(size = 5, show.legend = FALSE) + 
+    theme_minimal() +
+    theme(legend.position = "none") +
+    scale_color_manual(values = color_map) +
+    labs(x = "PCR_g", y = "PCR_c", title = "Conditions")
+
+p2
+```
+
+```{r}
+# combine individual plots
+pcr_plots <- list(p1, p2)
+
+pcr_plots <- lapply(pcr_plots, function(p) {
+  p + theme(
+    text = element_text(size = 16),
+    plot.title = element_text(size = 18)
+  )
+})
+
+combined_plot <- wrap_plots(pcr_plots, ncol = 2, guides = "collect") +
+  plot_annotation(
+    title = "PCR Scores per Selection",
+    theme = theme(
+      plot.title = element_text(
+        hjust = 0.5,
+        margin = margin(b = 30),
+        size = 20,
+        face = "bold"
+      )
+    )
+  )
+
+# save and show combined plot
+ggsave("da_pcr2_full.png", combined_plot, path = "../../outs/sim/",
+       width = 12, height = 6, dpi = 300)
+combined_plot
+```
+
+```{r}
+p1 <- pcr_scores$patches_clu_con_hvg %>% 
+  ggplot(aes(x = PCR_g, y = PCR_c, color = Selection, label = Selection)) +
+    geom_point(size = 3) +
+    geom_text_repel(size = 5, show.legend = FALSE) + 
+    theme_minimal() +
+    theme(legend.position = "none") +
+    scale_color_manual(values = color_map) +
+    labs(x = "PCR_g", y = "PCR_c", title = "Groups & Conditions")
+
+p1
+```
+
+```{r}
+p2 <- pcr_scores$patches_con_hvg %>% 
+  ggplot(aes(x = PCR_g, y = PCR_c, color = Selection, label = Selection)) +
+    geom_point(size = 3) +
+    geom_text_repel(size = 5, show.legend = FALSE) + 
+    theme_minimal() +
+    theme(legend.position = "none") +
+    scale_color_manual(values = color_map) +
+    labs(x = "PCR_g", y = "PCR_c", title = "Conditions")
+
+p2
+```
+
+```{r}
+# combine individual plots
+pcr_plots <- list(p1, p2)
+
+pcr_plots <- lapply(pcr_plots, function(p) {
+  p + theme(
+    text = element_text(size = 16),
+    plot.title = element_text(size = 18)
+  )
+})
+
+combined_plot <- wrap_plots(pcr_plots, ncol = 2, guides = "collect") +
+  plot_annotation(
+    title = "PCR Scores per Selection",
+    theme = theme(
+      plot.title = element_text(
+        hjust = 0.5,
+        margin = margin(b = 30),
+        size = 20,
+        face = "bold"
+      )
+    )
+  )
+
+# save and show combined plot
+ggsave("da_pcr2_hvg.png", combined_plot, path = "../../outs/sim/",
+       width = 12, height = 6, dpi = 300)
+combined_plot
+```
+
+
+
+## MI
+
+```{r}
+path <- "../../data/sim/05-da/"
+```
+
+### Embeddings
+
+```{r}
+emb <- read_csv(paste0(path, "embedding_mi.csv"), col_types = "cdddd")
+head(emb)
+```
+
+```{r}
+emb_experiments <- c("Groups & Conditions (Patches)", "Condtions (Patches)", "Conditions (DISCoVeR)")
+color_map <- setNames(qualitative_hcl(3, palette = "Dark 3"), emb_experiments)
+```
+
+```{r}
+p1 <- emb %>% 
+  filter(experiment %in% c("emb_clu_con_hvg", "emb_con_hvg", "emb_con_hvg_dis")) %>% 
+  mutate(name = c("Groups & Conditions (Patches)", "Condtions (Patches)", "Conditions (DISCoVeR)")) %>% 
+  ggplot(aes(x = reorder(name, mi_mean), y = mi_mean, fill = name)) +
+    geom_col() +
+    coord_flip() +
+    geom_errorbar(aes(ymin = mi_mean - mi_std, ymax = mi_mean + mi_std), width = 0.2) +
+    theme_minimal() +
+    theme(
+      legend.position = "none",
+      text = element_text(size = 16)
+    ) +
+    scale_fill_manual(values = color_map) +
+    labs(x = "", y = "NMI", title = "")
+
+p1
+```
+
+```{r}
+# combine individual plots
+mi_plots <- list(p1)
+
+combined_plot <- wrap_plots(mi_plots, ncol = 1, guides = "collect") +
+  plot_annotation(
+    title = "MI Scores per Workflow Embeddings",
+    theme = theme(
+      plot.title = element_text(
+        hjust = 0.5,
+        margin = margin(b = 30),
+        size = 20,
+        face = "bold"
+      )
+    )
+  )
+
+# save and show combined plot
+ggsave("da_mi_emb.png", combined_plot, path = "../../outs/sim/",
+       width = 8, height = 6, dpi = 300)
+combined_plot
+```
+
+### Selections
+
+```{r}
+sel <- read_csv(paste0(path, "selection_mi.csv"), col_types = "ccdddd")
+head(sel)
+```
+
+```{r}
+sel_pairs <- unique(sel$selection_pair)
+color_map <- setNames(qualitative_hcl(9, palette = "Dark 3"), sel_pairs)
+```
+
+```{r}
+p2 <- sel %>% 
+  filter(experiment == "sel_clu_con_full") %>% 
+  ggplot(aes(x = reorder(selection_pair, mi_mean), y = mi_mean, fill = selection_pair)) +
+    geom_col() +
+    coord_flip() +
+    geom_errorbar(aes(ymin = mi_mean - mi_std, ymax = mi_mean + mi_std), width = 0.2) +
+    theme_minimal() +
+    theme(
+      legend.position = "none",
+      plot.title = element_text(size = 18),
+      text = element_text(size = 16)
+    ) +
+    scale_fill_manual(values = color_map) +
+    labs(x = "", y = "NMI", title = "Groups & Conditions")
+
+p2
+```
+
+```{r}
+p3 <- sel %>% 
+  filter(experiment == "sel_con_full") %>% 
+  ggplot(aes(x = reorder(selection_pair, mi_mean), y = mi_mean, fill = selection_pair)) +
+    geom_col() +
+    coord_flip() +
+    geom_errorbar(aes(ymin = mi_mean - mi_std, ymax = mi_mean + mi_std), width = 0.2) +
+    theme_minimal() +
+    theme(
+      legend.position = "none",
+      plot.title = element_text(size = 18),
+      text = element_text(size = 16)
+    ) +
+    scale_fill_manual(values = color_map) +
+    labs(x = "", y = "NMI", title = "Conditions")
+
+p3
+```
+
+```{r}
+# combine individual plots
+mi_plots <- list(p2, p3)
+
+combined_plot <- wrap_plots(mi_plots, ncol = 2, guides = "collect") +
+  plot_annotation(
+    title = "MI Scores per Selection Pair",
+    theme = theme(
+      plot.title = element_text(
+        hjust = 0.5,
+        margin = margin(b = 30),
+        size = 20,
+        face = "bold"
+      )
+    )
+  )
+
+# save and show combined plot
+ggsave("da_mi_sel_full.png", combined_plot, path = "../../outs/sim/",
+       width = 15, height = 6, dpi = 300)
+combined_plot
+```
+
+```{r}
+p4 <- sel %>% 
+  filter(experiment == "sel_clu_con_hvg") %>% 
+  ggplot(aes(x = reorder(selection_pair, mi_mean), y = mi_mean, fill = selection_pair)) +
+    geom_col() +
+    coord_flip() +
+    geom_errorbar(aes(ymin = mi_mean - mi_std, ymax = mi_mean + mi_std), width = 0.2) +
+    theme_minimal() +
+    theme(
+      legend.position = "none",
+      plot.title = element_text(size = 18),
+      text = element_text(size = 16)
+    ) +
+    scale_fill_manual(values = color_map) +
+    labs(x = "", y = "NMI", title = "Groups & Conditions")
+
+p4
+```
+
+```{r}
+p5 <- sel %>% 
+  filter(experiment == "sel_con_hvg") %>% 
+  ggplot(aes(x = reorder(selection_pair, mi_mean), y = mi_mean, fill = selection_pair)) +
+    geom_col() +
+    coord_flip() +
+    geom_errorbar(aes(ymin = mi_mean - mi_std, ymax = mi_mean + mi_std), width = 0.2) +
+    theme_minimal() +
+    theme(
+      legend.position = "none",
+      plot.title = element_text(size = 18),
+      text = element_text(size = 16)
+    ) +
+    scale_fill_manual(values = color_map) +
+    labs(x = "", y = "NMI", title = "Conditions")
+
+p5
+```
+
+```{r}
+# combine individual plots
+mi_plots <- list(p4, p5)
+
+combined_plot <- wrap_plots(mi_plots, ncol = 2, guides = "collect") +
+  plot_annotation(
+    title = "MI Scores per Selection Pair",
+    theme = theme(
+      plot.title = element_text(
+        hjust = 0.5,
+        margin = margin(b = 30),
+        size = 20,
+        face = "bold"
+      )
+    )
+  )
+
+# save and show combined plot
+ggsave("da_mi_sel_hvg.png", combined_plot, path = "../../outs/sim/",
+       width = 15, height = 6, dpi = 300)
+combined_plot
+```
+
+
+
+
+
+

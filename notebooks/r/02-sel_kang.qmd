@@ -1,0 +1,475 @@
+---
+title: "Selections - Experimental Data"
+author: "Michel Tarnow"
+date: today
+format: 
+    html:
+      toc: true
+      self-contained: true
+      highlight-style: github
+      code-line-numbers: true
+editor_options: 
+    chunk_output_type: inline
+---
+
+## Import Packages
+
+```{r}
+suppressPackageStartupMessages({
+  library(reshape2)
+  library(caret)
+  library(patchwork)
+  library(SingleCellExperiment)
+  library(zellkonverter)
+  library(tidyverse)
+  library(viridis)
+  library(rlang)
+})
+```
+
+
+## Import Scores
+
+```{r}
+patches_scores <- readRDS("../../data/kang/02-sco/patches_scores.rds")
+fss_scores <- readRDS("../../data/kang/02-sco/fss_scores.rds")
+all_scores <- readRDS("../../data/kang/02-sco/all_scores.rds")
+```
+
+
+
+## Load and Process FSS Selections
+
+```{r}
+load_process_fss_selections <- function(files) {
+  
+  # select gene id and selection columns and combine all dfs in one list
+  fss_selection_dfs <- lapply(files, function(file) {
+    
+    # read in df from file
+    df <- readRDS(file)
+    
+    # df contains a single selection
+    new_colname <- df$sel[1]
+    df <- df %>% 
+      rename(!!new_colname := sel_val)
+    cols_to_keep <- c("gene_id", new_colname)
+    
+    # select gene and score columns
+    df <- df %>% 
+      select(all_of(cols_to_keep))
+    
+    return(df)
+    
+  })
+  
+  # combine all dfs in one df
+  fss_selections <- as_tibble(reduce(
+    fss_selection_dfs, 
+    ~ inner_join(.x, .y, by = "gene_id")
+  ))
+  
+  # sort columns
+  fss_selections <- fss_selections %>% 
+    select(everything())
+  
+  return(fss_selections)
+  
+}
+```
+
+```{r}
+# get all files containing selections
+rds_files <- list.files(
+  "../../data/kang/03-sel/",
+  pattern = "^sel.*\\.rds$", 
+  full.names = TRUE
+)
+
+# load and process FSS selections
+fss_selections <- load_process_fss_selections(rds_files)
+
+head(fss_selections)
+```
+
+```{r}
+# number of genes to select
+n <- sum(fss_selections$tF)
+```
+
+```{r}
+# add new FSS selections
+expand_fss_selections <- function(df) {
+  
+  # get FSS scores
+  score_df <- fss_scores
+  
+  # tF and sPBDS
+  score_names <- c("tF", "sPBDS")
+  if (all(score_names %in% colnames(score_df))) {
+    
+    t <- rank(score_df[[score_names[1]]])
+    s <- rank(score_df[[score_names[2]]])
+    
+    # state not type
+    scores <- s - t
+    cutoff <- sort(scores, decreasing = TRUE)[n]
+    df$sPBDS_tF <- scores >= cutoff
+    
+  }
+  
+  # tF and sPVE
+  score_names <- c("tF", "sPVE")
+  if (all(score_names %in% colnames(score_df))) {
+    
+    t <- rank(score_df[[score_names[1]]])
+    s <- rank(score_df[[score_names[2]]])
+    
+    # state not type
+    scores <- s - t
+    cutoff <- sort(scores, decreasing = TRUE)[n]
+    df$sPVE_tF <- scores >= cutoff
+    
+  }
+  
+  # tPVE and sPVE
+  score_names <- c("tPVE", "sPVE")
+  if (all(score_names %in% colnames(score_df))) {
+    
+    t <- rank(score_df[[score_names[1]]])
+    s <- rank(score_df[[score_names[2]]])
+    
+    # state not type
+    scores <- s - t
+    cutoff <- sort(scores, decreasing = TRUE)[n]
+    df$sPVE_tPVE <- scores >= cutoff
+    
+  }
+  
+  return(df)
+  
+}
+
+fss_selections <- expand_fss_selections(fss_selections)
+head(fss_selections)
+```
+
+
+
+## Compute Patches Selections
+
+```{r}
+patches_selections <- lapply(patches_scores, function(score_df) {
+  
+  # create binary df that contains binary selections based on scores
+  binary_df <- score_df
+  for (col in names(score_df)) {
+    
+    # skip gene id column
+    if (col == "gene_id") {
+      next
+    }
+    
+    # convert score into binary predictions
+    scores <- score_df[[col]]
+    cutoff <- sort(scores, decreasing = TRUE)[n]
+    binary_df[[col]] <- scores >= cutoff
+    
+  }
+  
+  # add new selections based on combinations of scores
+  
+  # difference in rank of max absolute group and condition scores
+  max_abs <- c("tMAV", "sMAV")
+  if (all(max_abs %in% colnames(score_df))) {
+    
+    t <- rank(score_df[[max_abs[1]]])
+    s <- rank(score_df[[max_abs[2]]])
+    
+    # type not state
+    scores <- t - s
+    cutoff <- sort(scores, decreasing = TRUE)[n]
+    binary_df$tMAV_sMAV <- scores >= cutoff
+    
+    # state not type
+    scores <- s - t
+    cutoff <- sort(scores, decreasing = TRUE)[n]
+    binary_df$sMAV_tMAV <- scores >= cutoff
+    
+  }
+  
+  # difference in rank of Euclidean norm group and condition scores
+  eucl_norm <- c("tEN", "sEN")
+  if (all(eucl_norm %in% colnames(score_df))) {
+    
+    t <- rank(score_df[[eucl_norm[1]]])
+    s <- rank(score_df[[eucl_norm[2]]])
+    
+    # type not state
+    scores <- t - s
+    cutoff <- sort(scores, decreasing = TRUE)[n]
+    binary_df$tEN_sEN <- scores >= cutoff
+    
+    # state not type
+    scores <- s - t
+    cutoff <- sort(scores, decreasing = TRUE)[n]
+    binary_df$sEN_tEN <- scores >= cutoff
+    
+  }
+  
+  # difference in rank of absolute difference group and condition scores
+  abs_dif <- c("tMAD", "sAD")
+  if (all(abs_dif %in% colnames(score_df))) {
+    
+    t <- rank(score_df[[abs_dif[1]]])
+    s <- rank(score_df[[abs_dif[2]]])
+    
+    # type not state
+    scores <- t - s
+    cutoff <- sort(scores, decreasing = TRUE)[n]
+    binary_df$tMAD_sAD <- scores >= cutoff
+    
+    # state not type
+    scores <- s - t
+    cutoff <- sort(scores, decreasing = TRUE)[n]
+    binary_df$sAD_tMAD <- scores >= cutoff
+    
+  }
+  
+  # difference in rank of common score and condition scores
+  com_con <- c("common_score", "sMAV", "sEN", "sAD")
+  if (all(com_con %in% colnames(score_df)) && !("B_cells_score" %in% colnames(score_df))) {
+    
+    t <- rank(score_df[[com_con[1]]])
+    s1 <- rank(score_df[[com_con[2]]])
+    s2 <- rank(score_df[[com_con[3]]])
+    s3 <- rank(score_df[[com_con[4]]])
+    
+    # common - sMAV
+    scores <- t - s1
+    cutoff <- sort(scores, decreasing = TRUE)[n]
+    binary_df$common_sMAV <- scores >= cutoff
+    
+    # common - sEN
+    scores <- t - s2
+    cutoff <- sort(scores, decreasing = TRUE)[n]
+    binary_df$common_sEN <- scores >= cutoff
+    
+    # common - sAD
+    scores <- t - s3
+    cutoff <- sort(scores, decreasing = TRUE)[n]
+    binary_df$common_sAD <- scores >= cutoff
+    
+    # sMAV - common
+    scores <- s1 - t
+    cutoff <- sort(scores, decreasing = TRUE)[n]
+    binary_df$sMAV_common <- scores >= cutoff
+    
+    # sEN - common
+    scores <- s2 - t
+    cutoff <- sort(scores, decreasing = TRUE)[n]
+    binary_df$sEN_common <- scores >= cutoff
+    
+    # sAD - common
+    scores <- s3 - t
+    cutoff <- sort(scores, decreasing = TRUE)[n]
+    binary_df$sAD_common <- scores >= cutoff
+    
+  }
+  
+  # remove selections not needed for downstream analyses
+  if ("B_cells_score" %in% colnames(binary_df)) {
+    binary_df <- binary_df %>% 
+      select(
+        -B_cells_score,
+        -CD14_Monocytes_score,
+        -CD4_T_cells_score,
+        -CD8_T_cells_score,
+        -Dendritic_cells_score,
+        -FCGR3A_Monocytes_score,
+        -Megakaryocytes_score,
+        -NK_cells_score
+      )
+  }
+  binary_df <- binary_df %>% 
+    select(
+      -ctrl_score,
+      -stim_score
+    )
+  
+  return(binary_df)
+  
+})
+
+names(patches_selections) <- names(patches_scores)
+lapply(patches_selections, head)
+```
+
+
+
+## Combine Selections
+
+```{r}
+# combine Patches and FSS selections in one df for each Patches workflow
+all_selections <- lapply(patches_selections, function(df) {
+    
+  new_df <- cbind.data.frame(
+    df,
+    fss_selections %>% 
+      select(!gene_id)
+  )
+  
+  # add all selection as baseline for downstream analyses
+  new_df$all_genes <- TRUE
+  
+  return(new_df)
+  
+})
+
+lapply(all_selections, head)
+```
+
+
+
+## Export Selections
+
+```{r}
+saveRDS(patches_selections, file = "../../data/kang/03-sel/patches_selections.rds")
+saveRDS(fss_selections, file = "../../data/kang/03-sel/fss_selections.rds")
+saveRDS(all_selections, file = "../../data/kang/03-sel/all_selections.rds")
+```
+
+
+
+## Compare Selections
+
+### Overlaps
+
+```{r}
+plot_overlaps <- function(df, title) {
+  
+  # FSS selections
+  fss_cols <- c(
+    "random",
+    "HVG",
+    "tF",
+    "tF_sPBDS",
+    "tF_sPVE",
+    "tPVE_sPVE",
+    "sPBDS_tF",
+    "sPVE_tF",
+    "sPVE_tPVE"
+  )
+  
+  # Patches selections
+  patches_cols <- setdiff(colnames(df), c(fss_cols, "all_genes"))
+
+  # compute overlaps
+  overlap_df <- expand.grid(Patches = patches_cols, FSS = fss_cols, stringsAsFactors = FALSE) %>% 
+    rowwise() %>% 
+    mutate(Overlap = sum(df[[Patches]] & df[[FSS]])) %>% 
+    ungroup()
+  
+  # order scores for plot
+  overlap_df$Patches <- factor(overlap_df$Patches, levels = patches_cols)
+  
+  # plot overlap as heat map
+  ggplot(overlap_df, aes(x = Patches, y = FSS, fill = Overlap)) +
+    geom_tile(color = "white") +
+    geom_text(aes(label = Overlap), color = "black") +
+    scale_fill_viridis_c(option = "C", direction = -1) +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+    labs(title = title, x = "", y = "")
+  
+}
+```
+
+```{r}
+p1 <- plot_overlaps(
+  all_selections$Kang18_clu_con %>% select(-gene_id),
+  "Cell Types & Conditions"
+)
+p1
+```
+
+```{r}
+p2 <- plot_overlaps(
+  all_selections$Kang18_con %>% select(-gene_id),
+  "Conditions"
+)
+p2
+```
+
+```{r}
+# combine individual plots
+overlap_plots <- list(p1, p2)
+subtitles <- c(
+  "Cell Types & Conditions",
+  "Conditions"
+)
+overlap_plots <- Map(function(p, sub) p + ggtitle(sub), overlap_plots, subtitles)
+
+overlap_plots <- lapply(overlap_plots, function(p) {
+  p + theme(
+    text = element_text(size = 16),
+    plot.title = element_text(size = 18)
+  )
+})
+
+combined_plot <- wrap_plots(overlap_plots, ncol = 1, guides = "collect") +
+  plot_annotation(
+    title = "Overlap of Selected Genes (n = 2000)",
+    theme = theme(
+      legend.position = "none",
+      plot.title = element_text(
+        hjust = 0.5,
+        margin = margin(b = 30),
+        size = 20,
+        face = "bold"
+      )
+    )
+  )
+
+# save and show combined plot
+ggsave("sel_overlap.png", combined_plot, path = "../../outs/kang/",
+       width = 8, height = 9, dpi = 300)
+combined_plot
+```
+
+
+
+## Export Selections to Anndata
+
+```{r}
+# read in sce file
+sce <- readRDS("../../data/kang/01-pro/Kang18.rds")
+
+# function for adding selection to sce objects
+add_selection_data <- function(sce, selections_list, name) {
+  
+  selection <- selections_list[[name]]
+  if (!all(rownames(sce) == selection$gene_id)) {
+    stop("Gene IDs do not match between SCE and selection table")
+  }
+  
+  rowData(sce) <- cbind(rowData(sce), selection[ , -1])
+  return(sce)
+  
+}
+
+# add selections to sce objects
+sce_clu_con <- add_selection_data(sce, all_selections, "Kang18_clu_con")
+sce_con     <- add_selection_data(sce, all_selections, "Kang18_con")
+
+# export sce to anndata
+writeH5AD(sce_clu_con, "../../data/kang/03-sel/Kang18-selections_clu_con.h5ad")
+writeH5AD(sce_con, "../../data/kang/03-sel/Kang18-selections_con.h5ad")
+```
+
+
+
+
+
+
+

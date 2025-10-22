@@ -1,0 +1,692 @@
+---
+title: "Scores - Simulation Data"
+author: "Michel Tarnow"
+date: today
+format: 
+    html:
+      toc: true
+      self-contained: true
+      highlight-style: github
+      code-line-numbers: true
+editor_options: 
+    chunk_output_type: inline
+---
+
+## Import Packages
+
+```{r}
+suppressPackageStartupMessages({
+  library(patchwork)
+  library(tidyverse)
+  library(viridis)
+  library(reshape2)
+})
+```
+
+
+
+## Helper Functions
+
+```{r}
+# helper function for loading and processing Patches scores
+load_process_patches_scores <- function(file) {
+  
+  # read in df from file and fix column names
+  df <- read_csv(
+    file,
+    col_names = TRUE,
+    name_repair = "minimal",
+    show_col_types = FALSE
+  )
+  colnames(df)[1] = "gene_id"
+  
+  # remove _Patches from column names
+  df <- df %>%
+    rename_with(~ sub("_Patches$", "", .x), ends_with("_Patches"))
+  
+  # add combinations of scores
+  
+  ## max absolute value for condition
+  df <- df %>% 
+    mutate(
+      sMAV = pmax(
+        abs(Condition1_score),
+        abs(Condition2_score)
+      )
+    )
+  
+  ## Euclidean norm for condition
+  df <- df %>% 
+    mutate(
+      sEN = sqrt(
+        Condition1_score^2 +
+          Condition2_score^2
+      )
+    )
+  
+  ## absolute difference for condition
+  df <- df %>% 
+    mutate(
+      sAD = abs(Condition1_score - Condition2_score))
+    
+  if ("Group1_score" %in% names(df)) {
+    # cluster and condition scores available
+    
+    ## max absolute value for group
+    df <- df %>% 
+      mutate(
+        tMAV = pmax(
+          abs(Group1_score),
+          abs(Group2_score),
+          abs(Group3_score)
+        )
+      )
+    
+    ## Euclidean norm for group
+    df <- df %>% 
+      mutate(
+        tEN = sqrt(
+          Group1_score^2 +
+            Group2_score^2 +
+            Group3_score^2
+        )
+      )
+    
+    ## max absolute difference for group
+    # df <- df %>% 
+      # mutate(
+        # tXAD = pmax(
+          # abs(Group1_score - Group2_score),
+          # abs(Group1_score - Group3_score),
+          # abs(Group2_score - Group3_score)
+        # )
+      # )
+    
+    ## mean absolute difference for group
+    df <- df %>% 
+      mutate(
+        tMAD = rowMeans(
+          cbind(
+            abs(Group1_score - Group2_score),
+            abs(Group1_score - Group3_score),
+            abs(Group2_score - Group3_score)
+          )
+        )
+      )
+    
+    ## sum of absolute differences for group
+    # df <- df %>% 
+      # mutate(
+        # tSAD = rowSums(
+          # cbind(
+            # abs(Group1_score - Group2_score),
+            # abs(Group1_score - Group3_score),
+            # abs(Group2_score - Group3_score)
+          # )
+        # )
+      #)
+    
+  }
+  
+  return(df)
+    
+}
+
+# helper function for loading and processing FSS scores
+load_process_fss_scores <- function(files, hvgs) {
+  
+  # select gene and score columns and combine all dfs in one list
+  dfs <- lapply(files, function(file) {
+    
+    # read in df from file
+    df <- readRDS(file)
+    
+    # rename score value column to score name
+    if (nrow(df) > length(unique(df$gene_id))) {
+      # df contains both tPVE and sPVE scores
+      
+      df <- df %>% 
+        pivot_wider(names_from = sco, values_from = sco_val)
+      cols_to_keep <- c("gene_id", "tPVE", "sPVE")
+      
+    } else {
+      # df contains a single score (all but tPVE + sPVE)
+      
+      new_colname <- df$sco[1]
+      df <- df %>% 
+        rename(!!new_colname := sco_val)
+      cols_to_keep <- c("gene_id", new_colname)
+      
+    }
+    
+    # select gene and score columns
+    df <- df %>% 
+      select(all_of(cols_to_keep))
+    
+    # return df
+    return(df)
+    
+  })
+  
+  # combine all dfs in one df
+  df_combined <- as_tibble(reduce(
+    dfs, 
+    ~ inner_join(.x, .y, by = "gene_id")
+  ))
+  
+  # create df HVGs only
+  df_combined_hvg <- df_combined %>% 
+    filter(gene_id %in% hvgs)
+  
+  # return combined df
+  return(
+    list(
+      fss_full = df_combined,
+      fss_hvg = df_combined_hvg
+    )
+  )
+  
+}
+```
+
+
+
+## Load and Process Patches Scores
+
+```{r}
+files <- list.files(
+  path = "../../data/sim/02-sco/",
+  pattern = "\\.csv$", full.names = TRUE,
+)
+
+patches_scores <- lapply(files, load_process_patches_scores)
+names(patches_scores) <- sub(".*-(.*)_loadings\\.csv", "\\1", basename(files))
+```
+
+```{r}
+lapply(patches_scores, head)
+```
+
+
+
+## Load and Process FSS Scores
+
+```{r}
+files <- list.files(
+  "../../data/sim/02-sco/",
+  pattern = "^sco.*\\.rds$", 
+  full.names = TRUE
+)
+hvgs <- patches_scores$patches_clu_con_hvg$gene_id
+
+fss_scores <- load_process_fss_scores(files, hvgs)
+```
+
+```{r}
+lapply(fss_scores, head)
+```
+
+
+
+## Combine and Transform Scores
+
+```{r}
+# combine Patches and FSS scores in one df for each Patches workflow
+# and add z-transformed scores
+# and add ranks
+all_scores <- lapply(patches_scores, function(df) {
+  
+  if (dim(df)[1] == dim(fss_scores$fss_full)[1]) {
+    # df contains full data
+    
+    new_df <- cbind.data.frame(
+      df,
+      fss_scores$fss_full %>% 
+        select(!gene_id)
+    )
+    
+  } else {
+    # df contains HVG data
+    
+    new_df <- cbind.data.frame(
+      df,
+      fss_scores$fss_hvg %>% 
+        select(!gene_id)
+    )
+    
+  }
+  
+  # add z-transformed scores and ranks
+  if ("common_score_z" %in% colnames(df)) {
+    # z-transformations already exist, skip df
+    return(new_df)
+  }
+  
+  new_df <- new_df %>% 
+    mutate(
+      across(
+        .cols = -gene_id,
+        .fns = list(
+          z = ~ as.numeric(scale(.x)),
+          rank = ~ rank(-.x, ties.method = "first")
+        ),
+        .names = "{.col}_{.fn}"
+      )
+    )
+  
+  return(new_df)
+  
+})
+
+lapply(all_scores, head)
+```
+
+
+
+## Export Scores
+
+```{r}
+saveRDS(patches_scores, file = "../../data/sim/02-sco/patches_scores.rds")
+saveRDS(fss_scores, file = "../../data/sim/02-sco/fss_scores.rds")
+saveRDS(all_scores, file = "../../data/sim/02-sco/all_scores.rds")
+```
+
+
+
+## Compare Scores
+
+### Correlation Between Scores
+
+```{r}
+# create correlation plots
+cor_plots_rank <- lapply(all_scores, function(df) {
+  
+  # select ranked scores
+  df_rank <- df %>% 
+    select(ends_with("_rank"))
+  
+  # calculate pairwise Spearman rank correlations
+  cor_mat <- cor(
+    df_rank,
+    use = "pairwise.complete.obs",
+    method = "spearman"
+  )
+  
+  # plot correlations as a heat map
+  cor_long <- melt(cor_mat)
+  ggplot(data = cor_long, mapping = aes(Var1, Var2, fill = value)) +
+    geom_tile() +
+    scale_fill_viridis_c(
+      option = "C",
+      direction = 1,
+      limits = c(-1, 1)
+    ) +
+    theme_minimal() +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1),
+      panel.grid = element_blank(),
+      plot.title = element_text(size = 11)
+    ) +
+    labs(x = "", y = "", fill = "Correlation")
+  
+})
+
+cor_plots_rank
+```
+
+```{r}
+# combine individual plots
+subtitles <- c(
+  "Full Data - Groups & Conditions",
+  "HVG Data - Groups & Conditions",
+  "Full Data - Conditions",
+  "HVG Data - Conditions"
+)
+cor_plots_rank <- Map(function(p, sub) p + ggtitle(sub), cor_plots_rank, subtitles)
+
+cor_plots_rank <- lapply(cor_plots_rank, function(p) {
+  p + theme(
+    text = element_text(size = 16),
+    plot.title = element_text(size = 18)
+  )
+})
+
+combined_plot <- wrap_plots(cor_plots_rank, ncol = 2, guides = "collect") +
+  plot_annotation(
+    title = "Spearman Correlation of Ranked Scores",
+    theme = theme(
+      plot.title = element_text(
+        hjust = 0.5,
+        margin = margin(b = 30),
+        size = 20,
+        face = "bold"
+      )
+    )
+  )
+
+# save and show combined plot
+ggsave("sco_cor_rank.png", combined_plot, path = "../../outs/sim/",
+       width = 14, height = 10, dpi = 300)
+combined_plot
+```
+
+```{r}
+# create correlation plots
+cor_plots_z <- lapply(all_scores, function(df) {
+  
+  # select z-transformed scores
+  df_z <- df %>% 
+    select(ends_with("_z"))
+  
+  # calculate pairwise Spearman rank correlations
+  cor_mat <- cor(
+    df_z,
+    use = "pairwise.complete.obs",
+    method = "spearman"
+  )
+  
+  # plot correlations as a heat map
+  cor_long <- melt(cor_mat)
+  ggplot(data = cor_long, mapping = aes(Var1, Var2, fill = value)) +
+    geom_tile() +
+    scale_fill_viridis_c(
+      option = "C",
+      direction = 1,
+      limits = c(-1, 1)
+    ) +
+    theme_minimal() +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1),
+      panel.grid = element_blank(),
+      plot.title = element_text(size = 11)
+    ) +
+    labs(x = "", y = "", fill = "Correlation")
+  
+})
+
+cor_plots_z
+```
+
+```{r}
+# combine individual plots
+subtitles <- c(
+  "Full Data - Groups & Conditions",
+  "HVG Data - Groups & Conditions",
+  "Full Data - Conditions",
+  "HVG Data - Conditions"
+)
+cor_plots_z <- Map(function(p, sub) p + ggtitle(sub), cor_plots_z, subtitles)
+
+cor_plots_z <- lapply(cor_plots_z, function(p) {
+  p + theme(
+    text = element_text(size = 16),
+    plot.title = element_text(size = 18)
+  )
+})
+
+combined_plot <- wrap_plots(cor_plots_z, ncol = 2, guides = "collect") +
+  plot_annotation(
+    title = "Spearman Correlation of Z-Transformed Scores",
+    theme = theme(
+      plot.title = element_text(
+        hjust = 0.5,
+        margin = margin(b = 30),
+        size = 20,
+        face = "bold"
+      )
+    )
+  )
+
+# save and show combined plot
+ggsave("sco_cor_z.png", combined_plot, path = "../../outs/sim/",
+       width = 14, height = 10, dpi = 300)
+combined_plot
+```
+
+```{r}
+# combine individual plots
+subtitles <- c(
+  "Groups & Conditions",
+  "Conditions"
+)
+plots <- cor_plots_z[c(1, 3)]
+plots <- Map(function(p, sub) p + ggtitle(sub), plots, subtitles)
+
+plots <- lapply(plots, function(p) {
+  p + theme(
+    text = element_text(size = 16),
+    plot.title = element_text(size = 18)
+  )
+})
+
+combined_plot <- wrap_plots(plots, ncol = 2, guides = "collect") +
+  plot_annotation(
+    title = "Spearman Correlation of Z-Transformed Scores",
+    theme = theme(
+      plot.title = element_text(
+        hjust = 0.5,
+        margin = margin(b = 30),
+        size = 20,
+        face = "bold"
+      )
+    )
+  )
+
+# save and show combined plot
+ggsave("sco_cor_z_full.png", combined_plot, path = "../../outs/sim/",
+       width = 14, height = 6, dpi = 300)
+combined_plot
+```
+
+```{r}
+# combine individual plots
+subtitles <- c(
+  "Groups & Conditions",
+  "Conditions"
+)
+plots <- cor_plots_z[c(2, 4)]
+plots <- Map(function(p, sub) p + ggtitle(sub), plots, subtitles)
+
+plots <- lapply(plots, function(p) {
+  p + theme(
+    text = element_text(size = 16),
+    plot.title = element_text(size = 18)
+  )
+})
+
+combined_plot <- wrap_plots(plots, ncol = 2, guides = "collect") +
+  plot_annotation(
+    title = "Spearman Correlation of Z-Transformed Scores",
+    theme = theme(
+      plot.title = element_text(
+        hjust = 0.5,
+        margin = margin(b = 30),
+        size = 20,
+        face = "bold"
+      )
+    )
+  )
+
+# save and show combined plot
+ggsave("sco_cor_z_hvg.png", combined_plot, path = "../../outs/sim/",
+       width = 14, height = 6, dpi = 300)
+combined_plot
+```
+
+### Overlap of top-n genes (Jaccard Index)
+
+```{r}
+# function to compute the top-n genes for a given rank
+get_top_n_genes <- function(df, rank, n) {
+  top_genes <- (df %>% 
+    arrange(.data[[rank]]) %>% 
+    slice_head(n = n))$gene_id
+  
+  return(top_genes)
+}
+
+# function to compute Jaccard index for top n genes
+compute_jaccard <- function(df, rank1, rank2, n) {
+  top1 <- get_top_n_genes(df, rank1, n)
+  top2 <- get_top_n_genes(df, rank2, n)
+  length(intersect(top1, top2)) / length(union(top1, top2))
+}
+
+# function to compute Jaccard matrix for all provided ranks
+compute_jaccard_matrix <- function(df, n) {
+  
+  rank_cols <- grep("_rank$", colnames(df), value = TRUE)
+  m <- length(rank_cols)
+  
+  jmat <- matrix(NA, nrow = m, ncol = m, dimnames = list(rank_cols, rank_cols))
+  
+  for (i in seq_along(rank_cols)) {
+    for (j in seq_along(rank_cols)) {
+      jmat[i, j] <- compute_jaccard(df, rank_cols[i], rank_cols[j], n)
+    }
+  }
+  
+  return(jmat)
+  
+}
+```
+
+```{r}
+# plot Jaccard indices as heat maps
+j_plots <- lapply(all_scores, function(df) {
+  
+  j_mat <- compute_jaccard_matrix(df, 100)
+  
+  j_long <- melt(j_mat)
+  ggplot(data = j_long, mapping = aes(Var1, Var2, fill = value)) +
+    geom_tile() +
+    scale_fill_viridis_c(
+      option = "C",
+      direction = 1,
+      limits = c(0, 1)
+    ) +
+    theme_minimal() +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1),
+      panel.grid = element_blank(),
+      plot.title = element_text(size = 11)
+    ) +
+    labs(x = "", y = "", fill = "Jaccard\nIndex")
+  
+})
+
+j_plots
+```
+
+```{r}
+# combine individual plots
+subtitles <- c(
+  "Full Data - Groups & Conditions",
+  "HVG Data - Groups & Conditions",
+  "Full Data - Conditions",
+  "HVG Data - Conditions"
+)
+j_plots <- Map(function(p, sub) p + ggtitle(sub), j_plots, subtitles)
+
+j_plots <- lapply(j_plots, function(p) {
+  p + theme(
+    text = element_text(size = 16),
+    plot.title = element_text(size = 18)
+  )
+})
+
+combined_plot <- wrap_plots(j_plots, ncol = 2, guides = "collect") +
+  plot_annotation(
+    title = "Jaccard Index of Top-100 Genes",
+    theme = theme(
+      plot.title = element_text(
+        hjust = 0.5,
+        margin = margin(b = 30),
+        size = 20,
+        face = "bold"
+      )
+    )
+  )
+
+# save and show combined plot
+ggsave("sco_jaccard.png", combined_plot, path = "../../outs/sim/",
+       width = 14, height = 10, dpi = 300)
+combined_plot
+```
+
+```{r}
+# combine individual plots
+subtitles <- c(
+  "Groups & Conditions",
+  "Conditions"
+)
+
+plots <- j_plots[c(1, 3)]
+plots <- Map(function(p, sub) p + ggtitle(sub), plots, subtitles)
+
+plots <- lapply(plots, function(p) {
+  p + theme(
+    text = element_text(size = 16),
+    plot.title = element_text(size = 18)
+  )
+})
+
+combined_plot <- wrap_plots(plots, ncol = 2, guides = "collect") +
+  plot_annotation(
+    title = "Jaccard Index of Top-100 Genes",
+    theme = theme(
+      plot.title = element_text(
+        hjust = 0.5,
+        margin = margin(b = 30),
+        size = 20,
+        face = "bold"
+      )
+    )
+  )
+
+# save and show combined plot
+ggsave("sco_jaccard_full.png", combined_plot, path = "../../outs/sim/",
+       width = 14, height = 6, dpi = 300)
+combined_plot
+```
+
+```{r}
+# combine individual plots
+subtitles <- c(
+  "Groups & Conditions",
+  "Conditions"
+)
+
+plots <- j_plots[c(2, 4)]
+plots <- Map(function(p, sub) p + ggtitle(sub), plots, subtitles)
+
+plots <- lapply(plots, function(p) {
+  p + theme(
+    text = element_text(size = 16),
+    plot.title = element_text(size = 18)
+  )
+})
+
+combined_plot <- wrap_plots(plots, ncol = 2, guides = "collect") +
+  plot_annotation(
+    title = "Jaccard Index of Top-100 Genes",
+    theme = theme(
+      plot.title = element_text(
+        hjust = 0.5,
+        margin = margin(b = 30),
+        size = 20,
+        face = "bold"
+      )
+    )
+  )
+
+# save and show combined plot
+ggsave("sco_jaccard_hvg.png", combined_plot, path = "../../outs/sim/",
+       width = 14, height = 6, dpi = 300)
+combined_plot
+```
+
+
+
+
+
