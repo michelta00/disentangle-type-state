@@ -1,0 +1,64 @@
+name: type-state
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+
+dependencies:
+  # Core languages
+  - python=3.11
+  - r-base=4.4
+
+  # Workflow management
+  - snakemake=7.26
+
+  # Bioconductor packages for single-cell RNA-seq analysis
+  - bioconductor-biocparallel
+  - bioconductor-edger
+  - bioconductor-scuttle
+  - bioconductor-splatter
+  - bioconductor-scater
+  - bioconductor-scran
+
+  # R development and visualization
+  - r-biocmanager
+  - r-devtools
+  - r-ggplot2
+  - r-pheatmap
+  - r-viridis
+
+  # Python scientific computing core
+  - numpy
+  - pandas
+  - scipy
+  - scikit-learn
+
+  # Python plotting
+  - matplotlib-base
+  - seaborn
+
+  # Single-cell analysis
+  - scanpy
+  - anndata
+  - h5py
+  - umap-learn
+
+  # Machine learning optimization
+  - optuna
+
+  # Jupyter support
+  - ipykernel
+  - ipywidgets
+
+  # Utilities
+  - pyfonts
+  - session-info2
+
+  # pip packages (deep learning and specific tools)
+  - pip:
+      - torch==2.8.0
+      - torchvision==0.23.0
+      - pyro-api==0.1.2
+      - pyro-ppl==1.9.1
+      - scladder==0.1.0
+      - pot==0.9.5
