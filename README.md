@@ -1,4 +1,9 @@
+<div align="center">
+
 # Disentangling Cell Type and Cell State in Multi-Condition scRNA-seq Data
+
+</div>
+
 
 A comprehensive analysis pipeline for disentangling cell type and cell state variation in multi-condition single-cell RNA-sequencing data using interpretable machine learning approaches.
 
