@@ -13,7 +13,7 @@ This project implements and compares multiple computational approaches for separ
 
 - **Patches**: A VAE-based approach for interpretable disentanglement of biological variation ([Beker *et al.*, 2025](https://www.biorxiv.org/content/10.1101/2024.12.23.630186v1))
 - **DISCoVeR**: Deep generative modeling for discovering latent representations ([Slavutsky *et al.*, 2025](https://arxiv.org/abs/2506.17182))
-- **Feature Selection Scores (FSS)**: Classical statistical approaches for gene selection ([Wang *et al.*, 2025](https://www.biorxiv.org/content/10.1101/2024.11.29.626057v2))
+- **Feature Selection Framework (FSF)**: Classical statistical approaches for gene selection ([Wang *et al.*, 2025](https://www.biorxiv.org/content/10.1101/2024.11.29.626057v2))
 
 The pipeline evaluates these methods on both simulated ([Wang *et al.*, 2025](https://www.biorxiv.org/content/10.1101/2024.11.29.626057v2)) and experimental datasets ([Kang et al., 2018](https://www.nature.com/articles/nbt.4042)), using multiple downstream analyses including clustering (ARI), mixing (LISI), principal component regression (PCR), and mutual information (MI) metrics.
 
@@ -135,7 +135,7 @@ The analysis follows a structured pipeline for both Kang (experimental) and simu
 
 ### 0. Data Retrieval
 - Datasets are not included in this repository due to their size
-- Datasets, FSS scores, and FSS selections can be obtained by running the snakemake workflow from [https://github.com/HelenaLC/type-state](https://github.com/HelenaLC/type-state)
+- Datasets, FSF scores, and FSF selections can be obtained by running the snakemake workflow from [https://github.com/HelenaLC/type-state](https://github.com/HelenaLC/type-state)
 
 ### 1. Data Preparation (`00-dat_*.qmd` / `00-data_*.ipynb`)
 - Load and preprocess raw data
@@ -161,4 +161,4 @@ The analysis follows a structured pipeline for both Kang (experimental) and simu
 ### 5. DISCoVeR Analysis (`02-discover_*.ipynb`)
 - Train DISCoVeR models
 - Extract embeddings
-- Comparative evaluation
+- Comparative evaluation with Patches (currently embedding level only)
